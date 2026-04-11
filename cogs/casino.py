@@ -69,10 +69,11 @@ async def validate(interaction: discord.Interaction, bet_str: str) -> tuple[int 
     now     = time.time()
     last    = cooldowns.get(user_id, 0)
     if now - last < COOLDOWN_SEC:
-        remaining = int(COOLDOWN_SEC - (now - last))
-        msg = f"⏱️ Кулдаун! Подожди ещё **{remaining} сек.**"
+        remaining = float(COOLDOWN_SEC - (now - last))
+        ready_time = int(last + COOLDOWN_SEC)
+        msg = f"⏱️ Кулдаун! Следующая ставка <t:{ready_time}:R>!"
         if interaction.channel.name.startswith("казино-"):
-            await interaction.response.send_message(msg, delete_after=3.0)
+            await interaction.response.send_message(msg, delete_after=remaining)
         else:
             await interaction.response.send_message(msg, ephemeral=True)
         return None, None
