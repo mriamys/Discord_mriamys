@@ -61,7 +61,7 @@ class GameSelect(discord.ui.Select):
         for game in selected_games:
             role = discord.utils.get(guild.roles, name=game)
             if not role:
-                role = await guild.create_role(name=game, mentionable=True, color=discord.Color.random())
+                role = await guild.create_role(name=game, mentionable=True, hoist=True, color=discord.Color.random())
             if role not in member.roles:
                 await member.add_roles(role)
                 added.append(game)
@@ -134,7 +134,7 @@ class DevSelect(discord.ui.Select):
             role_name = f"{dev} Coder"
             role = discord.utils.get(guild.roles, name=role_name)
             if not role:
-                role = await guild.create_role(name=role_name, mentionable=True, color=discord.Color.from_rgb(46, 204, 113))
+                role = await guild.create_role(name=role_name, mentionable=True, hoist=True, color=discord.Color.from_rgb(46, 204, 113))
             if role not in member.roles:
                 await member.add_roles(role)
                 
