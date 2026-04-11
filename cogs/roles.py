@@ -56,6 +56,7 @@ class GameSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         member = interaction.user
         
@@ -110,7 +111,7 @@ class GameSelect(discord.ui.Select):
                 except Exception as e:
                     print(f"Не удалось обновить права для {game}: {e}")
 
-        await interaction.response.send_message("Ваши игровые роли успешно обновлены! (Были добавлены нужные чаты, если их не было)", ephemeral=True)
+        await interaction.followup.send("Ваши игровые роли успешно обновлены! (Были добавлены нужные чаты, если их не было)", ephemeral=True)
 
 
 class DevSelect(discord.ui.Select):
@@ -129,6 +130,7 @@ class DevSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         member = interaction.user
         
@@ -216,7 +218,7 @@ class DevSelect(discord.ui.Select):
                     except Exception:
                         pass
 
-        await interaction.response.send_message("Ваши роли программиста обновлены!", ephemeral=True)
+        await interaction.followup.send("Ваши роли программиста обновлены!", ephemeral=True)
 
 
 class GameRoleView(discord.ui.View):
