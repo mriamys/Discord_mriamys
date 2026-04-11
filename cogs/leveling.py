@@ -191,6 +191,19 @@ class Leveling(commands.Cog):
         
         rank_name = self.get_rank_role_name_for_level(level)
         
+        # Автоматическая выдача роли ранга, если её нет (например, для новых юзеров с 0 уровнем)
+        target_role = discord.utils.get(member.guild.roles, name=rank_name)
+        if target_role and target_role not in member.roles:
+            try:
+                # Удаляем старые ранговые роли перед выдачей новой
+                rank_names = list(MEME_RANKS.values())
+                roles_to_remove = [r for r in member.roles if r.name in rank_names]
+                if roles_to_remove:
+                    await member.remove_roles(*roles_to_remove)
+                await member.add_roles(target_role)
+            except discord.Forbidden:
+                pass
+        
         await ctx.defer() # Картинка может генерироваться пару секунд
         
         # Получаем данные о кастомном фоне профиля (если есть)
