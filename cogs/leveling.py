@@ -145,6 +145,23 @@ class Leveling(commands.Cog):
                         await member.send(embed=embed, view=view)
                 except Exception as e:
                     logging.error(f"Could not setup rank msg: {e}")
+            elif new_level == 0:
+                # Оповещение о самом первом ранге (Кринж)
+                embed = discord.Embed(
+                    title="🌫️ НАЧАЛО ПУТИ!",
+                    description=f"Твой опыт начал копиться, и ты получаешь свой первый ранг — **{target_role_name}**!\nПродолжай активно общаться, чтобы повышать его!",
+                    color=0x808080
+                )
+                
+                rank_channel = discord.utils.get(member.guild.text_channels, name="📜┃ранг")
+                view = LevelUpView(member)
+                try:
+                    if rank_channel:
+                        await rank_channel.send(content=f"{member.mention}", embed=embed, view=view)
+                    else:
+                        await member.send(embed=embed, view=view)
+                except Exception as e:
+                    logging.error(f"Could not setup rank msg: {e}")
 
     @commands.hybrid_command(name="profile", aliases=["ранг", "rank"], description="Показать твою или чужую карточку профиля")
     async def profile(self, ctx, member: discord.Member = None):
