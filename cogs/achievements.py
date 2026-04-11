@@ -37,43 +37,73 @@ class Achievements(commands.Cog):
     async def on_message_sent(self, member, msg_count):
         if msg_count == 1:
             await self.grant_achievement(member, "first_msg")
+        elif msg_count == 100:
+            await self.grant_achievement(member, "msg_100")
+        elif msg_count == 1000:
+            await self.grant_achievement(member, "msg_1000")
         elif msg_count == 10000:
             await self.grant_achievement(member, "keyboard_rambo")
+        elif msg_count == 50000:
+            await self.grant_achievement(member, "msg_50000")
 
     @commands.Cog.listener()
     async def on_voice_time_updated(self, member, total_voice_time):
-        # 5 часов = 18000 секунд
+        if total_voice_time >= 3600:
+            await self.grant_achievement(member, "voice_1h")
         if total_voice_time >= 18000:
             await self.grant_achievement(member, "chair_glued")
+        if total_voice_time >= 36000:
+            await self.grant_achievement(member, "voice_10h")
+        if total_voice_time >= 180000:
+            await self.grant_achievement(member, "voice_50h")
 
     @commands.Cog.listener()
     async def on_shop_purchased(self, member, item_id, shop_spent, nick_changes):
+        if shop_spent >= 1000:
+            await self.grant_achievement(member, "store_1000")
         if shop_spent >= 5000:
             await self.grant_achievement(member, "ludoman")
+        if shop_spent >= 20000:
+            await self.grant_achievement(member, "store_20000")
             
         if item_id == "shut_up":
             await self.grant_achievement(member, "cringe_prisoner")
             
         if nick_changes >= 10:
             await self.grant_achievement(member, "jester")
+        if nick_changes >= 20:
+            await self.grant_achievement(member, "tilting_player")
 
     @commands.Cog.listener()
     async def on_xp_updated(self, member, new_xp):
-        # Проверяем "Абсолют" (100 лвл = 1000000 xp) и "Мамкин бизнесмен" (баланс)
-        user_data = await db.get_user(str(member.id))
-        
-        # Absolute (100 lvl formula is 0.1 * sqrt(xp). 100 / 0.1 = 1000. 1000^2 = 1,000,000 xp)
-        if new_xp >= 1000000:
+        # 10 lvl = 189,035 xp
+        if new_xp >= 189035:
+            await self.grant_achievement(member, "level_10")
+        # 50 lvl = 4,725,897 xp
+        if new_xp >= 4725897:
+            await self.grant_achievement(member, "level_50")
+        # 100 lvl = 18,903,591 xp
+        if new_xp >= 18903591:
             await self.grant_achievement(member, "absolute")
             
+        user_data = await db.get_user(str(member.id))
         vibecoins = user_data.get('vibecoins', 0)
+        
         if vibecoins >= 10000:
             await self.grant_achievement(member, "businessman")
+        if vibecoins >= 50000:
+            await self.grant_achievement(member, "crypto_hamster")
 
     @commands.Cog.listener()
     async def on_streak_updated(self, member, new_streak):
+        if new_streak >= 3:
+            await self.grant_achievement(member, "streak_3")
         if new_streak >= 7:
             await self.grant_achievement(member, "no_lifer")
+        if new_streak >= 14:
+            await self.grant_achievement(member, "streak_14")
+        if new_streak >= 30:
+            await self.grant_achievement(member, "streak_30")
 
 async def setup(bot):
     await bot.add_cog(Achievements(bot))
