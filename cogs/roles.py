@@ -116,7 +116,7 @@ class DevSelect(discord.ui.Select):
                 if role and role in member.roles:
                     await member.remove_roles(role)
 
-        # Выдаем
+        # Выдаем и создаем каналы
         for dev in selected_devs:
             role_name = f"{dev} Coder"
             role = discord.utils.get(guild.roles, name=role_name)
@@ -124,6 +124,26 @@ class DevSelect(discord.ui.Select):
                 role = await guild.create_role(name=role_name, mentionable=True, color=discord.Color.from_rgb(46, 204, 113))
             if role not in member.roles:
                 await member.add_roles(role)
+                
+            # Ищем категорию
+            cat_name = "💻┃ПРОГРАММИРОВАНИЕ"
+            category = discord.utils.get(guild.categories, name=cat_name)
+            if not category:
+                try:
+                    category = await guild.create_category(cat_name)
+                    await guild.create_voice_channel("🎙️┃ОБЩИЙ ВОЙС IT", category=category)
+                except Exception as e:
+                    print(e)
+            
+            # Создаем текстовый чат, если надо
+            clean_name = dev.lower().replace("++", "pp").replace("#", "sharp")
+            chan_name = f"💬┃{clean_name}-chat"
+            existing_channel = discord.utils.get(guild.text_channels, name=chan_name)
+            if category and not existing_channel:
+                try:
+                    await guild.create_text_channel(chan_name, category=category)
+                except Exception as e:
+                    print(e)
 
         await interaction.response.send_message("Ваши роли программиста обновлены!", ephemeral=True)
 

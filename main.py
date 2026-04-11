@@ -34,6 +34,14 @@ class MriamysBot(commands.Bot):
                     logging.info(f"Loaded extension: {filename}")
                 except Exception as e:
                     logging.error(f"Failed to load extension {filename}: {e}")
+                    
+        # Добавляем Persistent Views
+        try:
+            from cogs.shop import ShopView
+            self.add_view(ShopView())
+            logging.info("Registered ShopView")
+        except Exception as e:
+            logging.error(f"Failed to register persistent views: {e}")
 
     async def on_ready(self):
         logging.info(f"Logged in as {self.user} (ID: {self.user.id})")
