@@ -9,7 +9,7 @@ class Logger(commands.Cog):
 
     async def get_log_channel(self, guild):
         for channel in guild.text_channels:
-            if channel.name.lower() == 'логи':
+            if 'логи' in channel.name.lower():
                 return channel
         return None
 

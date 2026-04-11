@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 import aiohttp
 import os
+import json
 import logging
 from config import COLOR_SUCCESS
 
@@ -16,6 +17,11 @@ class TwitchNotifier(commands.Cog):
         self.is_live = False
         self.app_access_token = None
         self.announce_messages = []
+        self._saved_messages = []
+        self.state_file = "data/twitch_state.json"
+        
+        # Загружаем сохраненные данные, чтобы не спамить после перезапуска
+        self.load_state()
         
         if self.client_id and self.client_secret:
             logging.info(f"TwitchNotifier enabled for channel: {self.twitch_channel}")
@@ -25,6 +31,39 @@ class TwitchNotifier(commands.Cog):
             
     def cog_unload(self):
         self.check_twitch.cancel()
+
+    def save_state(self):
+        # Если announce_messages пуст, возможно мы загрузили из файла и еще не получали объекты Message, сохраняем сырые
+        saved_list = [{"c": m.channel.id, "m": m.id} for m in self.announce_messages] if self.announce_messages else self._saved_messages
+        os.makedirs("data", exist_ok=True)
+        with open(self.state_file, "w") as f:
+            json.dump({"is_live": self.is_live, "announce_messages": saved_list}, f)
+
+    def load_state(self):
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    data = json.load(f)
+                    self.is_live = data.get("is_live", False)
+                    self._saved_messages = data.get("announce_messages", [])
+            except Exception as e:
+                logging.error(f"Error loading twitch state: {e}")
+
+    async def get_announce_messages(self):
+        if self.announce_messages:
+            return self.announce_messages
+        
+        msgs = []
+        for info in self._saved_messages:
+            try:
+                channel = self.bot.get_channel(info["c"])
+                if channel:
+                    msg = await channel.fetch_message(info["m"])
+                    msgs.append(msg)
+            except Exception:
+                pass
+        self.announce_messages = msgs
+        return msgs
 
     async def get_access_token(self):
         url = f"https://id.twitch.tv/oauth2/token?client_id={self.client_id}&client_secret={self.client_secret}&grant_type=client_credentials"
@@ -73,12 +112,14 @@ class TwitchNotifier(commands.Cog):
                                 self.is_live = True
                                 logging.info(f"Twitch channel {self.twitch_channel} just went LIVE!")
                                 await self.announce_stream(stream_info)
+                                self.save_state()
                             else:
                                 await self.update_stream(stream_info)
                         elif not is_currently_live and self.is_live:
                             self.is_live = False
                             logging.info(f"Twitch channel {self.twitch_channel} went offline.")
                             await self.end_stream()
+                            self.save_state()
                     else:
                         logging.error(f"Twitch API returned HTTP {response.status}")
         except Exception as e:
@@ -144,17 +185,19 @@ class TwitchNotifier(commands.Cog):
                 logging.error(f"Failed to send stream announcement: {e}")
 
     async def update_stream(self, stream_info):
-        if not self.announce_messages:
+        msgs = await self.get_announce_messages()
+        if not msgs:
             return
         embed = self.build_embed(stream_info)
-        for msg in self.announce_messages:
+        for msg in msgs:
             try:
                 await msg.edit(embed=embed)
             except Exception as e:
                 logging.error(f"Failed to update stream message: {e}")
                 
     async def end_stream(self):
-        for msg in self.announce_messages:
+        msgs = await self.get_announce_messages()
+        for msg in msgs:
             try:
                 embed = msg.embeds[0]
                 embed.title = f"🔴 {self.twitch_channel} закончил стрим."
@@ -165,6 +208,7 @@ class TwitchNotifier(commands.Cog):
             except Exception as e:
                 logging.error(f"Failed to end stream message: {e}")
         self.announce_messages = []
+        self._saved_messages = []
 
 async def setup(bot):
     await bot.add_cog(TwitchNotifier(bot))
