@@ -102,6 +102,12 @@ class Economy(commands.Cog):
         # Вызываем диспетчер проверки уровня (это будет ловить Cog Leveling)
         self.bot.dispatch("xp_updated", message.author, new_xp)
         self.bot.dispatch("message_sent", message.author, new_msg_count)
+        
+        # Проверяем взаимодействие через реплай для ачивок
+        if message.reference and isinstance(message.reference.resolved, discord.Message):
+            replied_to = message.reference.resolved.author
+            if replied_to.id != message.author.id and not replied_to.bot:
+                self.bot.dispatch("message_reply_interaction", message.author, replied_to)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -135,6 +141,7 @@ class Economy(commands.Cog):
             # Начинаем трекать, если стал eligible
             if eligible and user_id not in self.voice_sessions:
                 self.voice_sessions[user_id] = now
+                self.bot.dispatch("voice_role_interaction", u, u.voice.channel.members)
                 
             # Заканчиваем трекать, если перестал быть eligible (вышел, замутился, остался один в канале)
             elif not eligible and user_id in self.voice_sessions:

@@ -406,6 +406,47 @@ class Leveling(commands.Cog):
         view = ProfileView(member)
         await ctx.send(file=file, view=view)
 
+    @commands.hybrid_command(name="stat", aliases=["стат", "статистика", "stats"], description="Показать детальную текстовую статистику пользователя")
+    async def stat(self, ctx, member: discord.Member = None):
+        member = member or ctx.author
+        
+        user_data = await db.get_user(str(member.id))
+        achievements = await db.get_achievements(str(member.id))
+        
+        from utils.achievements_data import ACHIEVEMENTS
+        total_ach = len(ACHIEVEMENTS)
+        
+        level = user_data.get('level', 0)
+        xp = user_data.get('xp', 0)
+        vibecoins = user_data.get('vibecoins', 0)
+        voice_sec = user_data.get('voice_time_seconds', 0)
+        msgs = user_data.get('msg_count', 0)
+        spent = user_data.get('shop_spent', 0)
+        nicks = user_data.get('nick_changes', 0)
+        streak = user_data.get('streak', 0)
+        
+        hours = voice_sec // 3600
+        mins = (voice_sec % 3600) // 60
+        
+        embed = discord.Embed(title=f"📊 Статистика: {member.display_name}", color=0x2b2d31)
+        if member.display_avatar:
+            embed.set_thumbnail(url=member.display_avatar.url)
+        else:
+            embed.set_thumbnail(url=member.default_avatar.url)
+        
+        embed.add_field(name="🏆 Уровень / XP", value=f"Ур. {level} ({xp} XP)", inline=True)
+        embed.add_field(name="💰 VibeКоины", value=f"{vibecoins}", inline=True)
+        embed.add_field(name="🌟 Ачивки", value=f"{len(achievements)} / {total_ach}", inline=True)
+        
+        embed.add_field(name="🎙️ В голосе", value=f"{hours}ч {mins}м", inline=True)
+        embed.add_field(name="💬 Сообщений", value=f"{msgs}", inline=True)
+        embed.add_field(name="🔥 Стрик", value=f"{streak} дней", inline=True)
+        
+        embed.add_field(name="🛒 Траты в магазине", value=f"{spent} VC", inline=True)
+        embed.add_field(name="🤡 Смен ников", value=f"{nicks}", inline=True)
+        
+        await ctx.send(embed=embed)
+
 async def setup(bot):
     await bot.add_cog(Leveling(bot))
 
