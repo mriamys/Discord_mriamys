@@ -6,6 +6,7 @@ from config import COLOR_MAIN
 import asyncio
 import logging
 from datetime import timedelta
+from cogs.casino import CasinoView
 
 SHOP_ITEMS = {
     "nickname":    {"name": "🏷️ Погоняло",       "price": 1000, "desc": "Сменить ник любому участнику на 1 час."},
@@ -182,6 +183,58 @@ class ShopView(View):
             )
             button.callback = self._make_callback(item_id)
             self.add_item(button)
+        
+        # Кнопка личного казино
+        casino_btn = Button(
+            label="🎰 VIP Казино",
+            style=discord.ButtonStyle.success,
+            custom_id="shop_casino",
+            emoji="🎟️"
+        )
+        casino_btn.callback = self._casino_callback
+        self.add_item(casino_btn)
+
+    async def _casino_callback(self, interaction: discord.Interaction):
+        # Проверяем не создан ли уже канал
+        guild = interaction.guild
+        channel_name = f"казино-{interaction.user.name[:15]}"
+        existing = discord.utils.get(guild.channels, name=channel_name.lower())
+        if existing:
+            await interaction.response.send_message(f"У тебя уже есть открытый стол: {existing.mention}", ephemeral=True)
+            return
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user:   discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            guild.me:           discord.PermissionOverwrite(read_messages=True, send_messages=True),
+        }
+        
+        try:
+            channel = await guild.create_text_channel(
+                channel_name,
+                overwrites=overwrites,
+                category=interaction.channel.category,
+                topic=f"Личный казино-стол для {interaction.user.display_name} 🎰"
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ У бота нет прав для создания приватного канала.", ephemeral=True)
+            return
+
+        await interaction.response.send_message(f"✅ Твой VIP-стол накрыт: {channel.mention}", ephemeral=True)
+        
+        embed = discord.Embed(
+            title=f"🎰 Личный VIP-стол: {interaction.user.display_name}",
+            description=(
+                "Добро пожаловать в закрытый клуб! Умножай свои **VibeКоины** в тишине и покое.\n\n"
+                "**🎰 Слоты** — классика. 3 в ряд до **x50**!\n"
+                "**🪙 Монетка** — 50/50. Выигрыш **x1.9**\n"
+                "**🎲 Кости** — угадай число 1–6 и получи **x5**!\n\n"
+                "Жми кнопку ниже, чтобы сделать ставку. Когда закончишь, нажми **Выйти**, чтобы закрыть этот стол."
+            ),
+            color=0xF1C40F
+        )
+        embed.set_image(url="https://media.giphy.com/media/3ohzdFmHSiRBbhzaE8/giphy.gif")
+        await channel.send(content=interaction.user.mention, embed=embed, view=CasinoView())
 
     def _make_callback(self, item_id: str):
         async def callback(interaction: discord.Interaction):

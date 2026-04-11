@@ -220,6 +220,15 @@ class CasinoView(View):
     async def dice_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(DiceModal())
 
+    @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.danger, custom_id="casino_leave")
+    async def leave_btn(self, interaction: discord.Interaction, button: Button):
+        if interaction.channel.name.startswith("казино-"):
+            await interaction.response.send_message("💣 Стол закрыт! Убираем фишки...", ephemeral=True)
+            await asyncio.sleep(2)
+            await interaction.channel.delete()
+        else:
+            await interaction.response.send_message("❌ Эту кнопку можно нажимать только в личном VIP-канале казино.", ephemeral=True)
+
 
 # ─── Cog ─────────────────────────────────────────────────────────────────────
 
