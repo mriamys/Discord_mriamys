@@ -90,9 +90,9 @@ class Leveling(commands.Cog):
         self.bot = bot
 
     def calc_level(self, xp):
-        # Формула: XP = (Уровень / 0.1) ^ 2
-        # Уровень = 0.1 * sqrt(XP)
-        return int(0.1 * math.sqrt(xp))
+        # Формула: XP = (Уровень / 0.023) ^ 2
+        # Уровень = 0.023 * sqrt(XP)
+        return int(0.023 * math.sqrt(xp))
         
     def get_rank_role_name_for_level(self, level):
         highest_rank = MEME_RANKS[0]
@@ -145,6 +145,28 @@ class Leveling(commands.Cog):
                         await member.send(embed=embed, view=view)
                 except Exception as e:
                     logging.error(f"Could not setup rank msg: {e}")
+
+    @commands.command(name="recalc_levels")
+    @commands.has_permissions(administrator=True)
+    async def recalc_levels(self, ctx):
+        await ctx.send("Перерасчет уровней начат. Пожалуйста, подождите...")
+        import math
+        async with db.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT user_id, xp FROM users")
+                users = await cur.fetchall()
+                
+                count = 0
+                for user in users:
+                    user_xp = user["xp"]
+                    uid = user["user_id"]
+                    new_level = int(0.023 * math.sqrt(user_xp))
+                    await cur.execute("UPDATE users SET level = %s WHERE user_id = %s", (new_level, uid))
+                    count += 1
+                    
+            await conn.commit()
+            
+        await ctx.send(f"✅ Перерасчет завершен! Обновлено {count} уровней по новой формуле (0.023).")
 
     @commands.hybrid_command(name="profile", aliases=["ранг", "rank"], description="Показать твою или чужую карточку профиля")
     async def profile(self, ctx, member: discord.Member = None):

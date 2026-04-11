@@ -164,8 +164,13 @@ class TwitchNotifier(commands.Cog):
         
         thumbnail_url = stream_info.get("thumbnail_url", "").replace("{width}", "1280").replace("{height}", "720")
         
+        if login == self.main_channel:
+            embed_title = f"🔴 {login} онлайн на Twitch!"
+        else:
+            embed_title = f"🔴 Стрим друга: {login} онлайн!"
+            
         embed = discord.Embed(
-            title=f"🔴 {login} онлайн на Twitch!",
+            title=embed_title,
             description=f"**{title}**\n\n🎮 Категория: **{game}**\n👥 Зрителей прямо сейчас: **{viewer_count}**\n\n👉 **[Присоединяйся к просмотру!]({f'https://www.twitch.tv/{login}'})**",
             url=f"https://www.twitch.tv/{login}",
             color=0x9146FF

@@ -84,7 +84,7 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     voice_str = f"В голосе: {v_hours}ч {v_mins:02d}м"
     background.text((start_x + 300, 155), voice_str, font=font_text, color="#aaaaaa")
 
-    next_level_xp = ((level + 1) / 0.1) ** 2
+    next_level_xp = ((level + 1) / 0.023) ** 2
     percentage = min(max((xp / next_level_xp) * 100, 0), 100) if next_level_xp > 0 else 0
     
     xp_text = f"{int(xp)} / {int(next_level_xp)} XP"
