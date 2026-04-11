@@ -23,11 +23,11 @@ DEV_OPTIONS = {
     "Программист": "💻",
     "Python": "🐍",
     "JavaScript": "📜",
-    "TypeScript": "🟦",
+    "TypeScript": "📘",
     "Java": "☕",
     "C++": "⚙️",
     "C#": "💠",
-    "C": "🏗️",
+    "C": "🔧",
     "Go": "🐹",
     "Rust": "🦀",
     "PHP": "🐘",
@@ -37,7 +37,7 @@ DEV_OPTIONS = {
     "HTML": "🌐",
     "CSS": "🎨",
     "SQL": "💾",
-    "Bash": "🖳"
+    "Bash": "🐧"
 }
 
 
@@ -115,10 +115,11 @@ class GameSelect(discord.ui.Select):
 
 class DevSelect(discord.ui.Select):
     def __init__(self):
-        options = [
-            discord.SelectOption(label=dev, emoji=emoji, description=f"Я кодер на {dev}")
-            for dev, emoji in DEV_OPTIONS.items()
-        ]
+        options = []
+        for dev, emoji in DEV_OPTIONS.items():
+            desc = "Основная роль" if dev == "Программист" else f"Кодер на {dev}"
+            options.append(discord.SelectOption(label=dev, emoji=emoji, description=desc))
+            
         super().__init__(
             placeholder="Выберите языки программирования...",
             min_values=0,
