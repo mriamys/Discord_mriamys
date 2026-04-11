@@ -116,4 +116,18 @@ class Database:
                 query = f"UPDATE users SET {set_clause} WHERE user_id = %s"
                 await cur.execute(query, values)
 
+    async def get_leaderboard(self, category: str, limit: int = 10):
+        order_by = "level DESC, xp DESC"
+        if category == "coins":
+            order_by = "vibecoins DESC"
+        elif category == "voice":
+            order_by = "voice_time_seconds DESC"
+        elif category == "streak":
+            order_by = "streak DESC"
+            
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(f"SELECT * FROM users ORDER BY {order_by} LIMIT %s", (limit,))
+                return await cur.fetchall()
+
 db = Database()

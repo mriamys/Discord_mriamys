@@ -145,9 +145,91 @@ class ProfileView(discord.ui.View):
         await interaction.response.send_message(msg, ephemeral=True)
 
 
+class TopView(discord.ui.View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=120)
+        self.author = author
+
+    @discord.ui.select(
+        placeholder="Выберите категорию...",
+        options=[
+            discord.SelectOption(label="🏆 Уровень (XP)", value="level", description="Самые прокачанные пользователи"),
+            discord.SelectOption(label="💰 VibeКоины", value="coins", description="Самые богатые пользователи"),
+            discord.SelectOption(label="🎙️ Голосовой актив", value="voice", description="Больше всего времени в войсах"),
+            discord.SelectOption(label="🔥 Стрики", value="streak", description="Самые длинные серии общения"),
+        ]
+    )
+    async def select_category(self, interaction: discord.Interaction, select: discord.ui.Select):
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message("Это меню не для вас!", ephemeral=True)
+            return
+            
+        category = select.values[0]
+        await interaction.response.defer()
+        
+        from utils.db import db
+        data = await db.get_leaderboard(category, limit=10)
+        
+        titles = {
+            "level": "🏆 ТОП-10 по Уровню",
+            "coins": "💰 ТОП-10 по Коинам",
+            "voice": "🎙️ ТОП-10 по Голосу",
+            "streak": "🔥 ТОП-10 по Стрикам"
+        }
+        
+        embed = discord.Embed(title=titles[category], color=0x2b2d31)
+        
+        if not data:
+            embed.description = "Пусто..."
+        else:
+            desc = ""
+            for idx, user_data in enumerate(data, 1):
+                member = interaction.guild.get_member(int(user_data['user_id']))
+                name = member.mention if member else f"<@{user_data['user_id']}>"
+                
+                medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"{idx}."
+                
+                if category == "level":
+                    val = f"Ур. {user_data['level']} ({user_data['xp']} XP)"
+                elif category == "coins":
+                    val = f"{user_data['vibecoins']} VC"
+                elif category == "voice":
+                    s = user_data.get('voice_time_seconds', 0)
+                    val = f"{s // 3600}ч {(s % 3600) // 60}м"
+                elif category == "streak":
+                    val = f"{user_data['streak']} 🔥"
+                    
+                desc += f"{medal} {name} — **{val}**\n"
+                
+            embed.description = desc
+            
+        await interaction.message.edit(embed=embed, view=self)
+
 class Leveling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    @commands.hybrid_command(name="top", aliases=["топ"], description="Посмотреть списки лидеров сервера")
+    async def top(self, ctx):
+        from utils.db import db
+        data = await db.get_leaderboard("level", limit=10)
+        embed = discord.Embed(title="🏆 ТОП-10 по Уровню", color=0x2b2d31)
+        
+        if not data:
+            embed.description = "Пусто..."
+        else:
+            desc = ""
+            for idx, user_data in enumerate(data, 1):
+                member = ctx.guild.get_member(int(user_data['user_id']))
+                name = member.mention if member else f"<@{user_data['user_id']}>"
+                medal = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"{idx}."
+                val = f"Ур. {user_data['level']} ({user_data['xp']} XP)"
+                desc += f"{medal} {name} — **{val}**\n"
+            embed.description = desc
+            
+        view = TopView(ctx.author)
+        await ctx.send(embed=embed, view=view)
+
 
     def calc_level(self, xp):
         # Формула: XP = (Уровень / 0.023) ^ 2
