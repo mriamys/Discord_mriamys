@@ -8,10 +8,9 @@ import logging
 from datetime import timedelta
 
 SHOP_ITEMS = {
-    "nickname":    {"name": "🏷️ Погоняло",         "price": 1000, "desc": "Сменить ник любому участнику на 1 час."},
-    "fake_status": {"name": "🎭 Фейковый статус",   "price": 500,  "desc": "Добавляет любую приписку к твоему нику на 1 час."},
-    "bunker":      {"name": "🏰 Личный бункер",     "price": 2000, "desc": "Создаёт приватный текстовый канал только для тебя на 1 час."},
-    "shut_up":     {"name": "🤐 Заткнись!",         "price": 5000, "desc": "Выдаёт мут выбранному человеку на 30 секунд. Дорого и больно!"},
+    "nickname":    {"name": "🏷️ Погоняло",       "price": 1000, "desc": "Сменить ник любому участнику на 1 час."},
+    "fake_status": {"name": "🎭 Фейковый статус", "price": 500,  "desc": "Добавляет любую приписку к твоему нику на 1 час."},
+    "shut_up":     {"name": "🤐 Заткнись!",       "price": 5000, "desc": "Выдаёт мут выбранному человеку на 30 секунд. Дорого и больно!"},
 }
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────
@@ -197,35 +196,6 @@ class ShopView(View):
 
             elif item_id == "fake_status":
                 await interaction.response.send_modal(FakeStatusModal(user_data))
-
-            elif item_id == "bunker":
-                new_balance = await deduct(interaction, "bunker", user_data)
-                guild = interaction.guild
-                overwrites = {
-                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                    interaction.user:   discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                    guild.me:           discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                }
-                try:
-                    channel = await guild.create_text_channel(
-                        f"бункер-{interaction.user.name[:15]}",
-                        overwrites=overwrites,
-                        category=interaction.channel.category,
-                        topic=f"Личный бункер {interaction.user.display_name} на 1 час 🏰"
-                    )
-                    await channel.send(
-                        f"🏰 Добро пожаловать в свой бункер, {interaction.user.mention}!\n"
-                        f"Канал самоуничтожится через **1 час**. 💣"
-                    )
-                    await interaction.response.send_message(
-                        f"✅ Бункер создан: {channel.mention}\nОстаток: {new_balance} 🪙", ephemeral=True
-                    )
-                    asyncio.create_task(_delete_channel(channel, delay=3600))
-                except discord.Forbidden:
-                    await refund(interaction.user.id, "bunker")
-                    await interaction.response.send_message(
-                        "❌ Нет прав для создания канала.", ephemeral=True
-                    )
 
             elif item_id == "shut_up":
                 await interaction.response.send_message(
