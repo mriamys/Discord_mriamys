@@ -22,12 +22,22 @@ GAME_OPTIONS = {
 DEV_OPTIONS = {
     "Программист": "💻",
     "Python": "🐍",
-    "Java": "☕",
     "JavaScript": "📜",
-    "CSS": "🎨",
-    "HTML": "🌐",
+    "TypeScript": "🟦",
+    "Java": "☕",
     "C++": "⚙️",
-    "C#": "💠"
+    "C#": "💠",
+    "C": "🏗️",
+    "Go": "🐹",
+    "Rust": "🦀",
+    "PHP": "🐘",
+    "Ruby": "💎",
+    "Swift": "🍎",
+    "Kotlin": "🤖",
+    "HTML": "🌐",
+    "CSS": "🎨",
+    "SQL": "💾",
+    "Bash": "🖳"
 }
 
 
