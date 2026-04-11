@@ -15,6 +15,7 @@ class TwitchNotifier(commands.Cog):
         
         self.is_live = False
         self.app_access_token = None
+        self.announce_messages = []
         
         if self.client_id and self.client_secret:
             logging.info(f"TwitchNotifier enabled for channel: {self.twitch_channel}")
@@ -66,14 +67,18 @@ class TwitchNotifier(commands.Cog):
                         streams = data.get("data", [])
                         is_currently_live = len(streams) > 0
                         
-                        if is_currently_live and not self.is_live:
-                            self.is_live = True
+                        if is_currently_live:
                             stream_info = streams[0]
-                            logging.info(f"Twitch channel {self.twitch_channel} just went LIVE!")
-                            await self.announce_stream(stream_info)
+                            if not self.is_live:
+                                self.is_live = True
+                                logging.info(f"Twitch channel {self.twitch_channel} just went LIVE!")
+                                await self.announce_stream(stream_info)
+                            else:
+                                await self.update_stream(stream_info)
                         elif not is_currently_live and self.is_live:
                             self.is_live = False
                             logging.info(f"Twitch channel {self.twitch_channel} went offline.")
+                            await self.end_stream()
                     else:
                         logging.error(f"Twitch API returned HTTP {response.status}")
         except Exception as e:
@@ -83,53 +88,83 @@ class TwitchNotifier(commands.Cog):
     async def before_check(self):
         await self.bot.wait_until_ready()
 
-    async def announce_stream(self, stream_info):
+    def build_embed(self, stream_info):
         title = stream_info.get("title", "Трансляция началась!")
         game = stream_info.get("game_name", "Just Chatting")
         viewer_count = stream_info.get("viewer_count", 0)
         
-        # Replace {width} and {height} placeholders in thumbnail URL
         thumbnail_url = stream_info.get("thumbnail_url", "").replace("{width}", "1280").replace("{height}", "720")
         
         embed = discord.Embed(
-            title=f"🔴 {self.twitch_channel} только что запустил стрим на Twitch!",
+            title=f"🔴 {self.twitch_channel} онлайн на Twitch!",
             description=f"**{title}**\n\n🎮 Категория: **{game}**\n👥 Зрителей прямо сейчас: **{viewer_count}**\n\n👉 **[Присоединяйся к просмотру!]({f'https://www.twitch.tv/{self.twitch_channel}'})**",
             url=f"https://www.twitch.tv/{self.twitch_channel}",
-            color=0x9146FF # Twitch purple brand color
+            color=0x9146FF
         )
         
         if thumbnail_url:
-            # Cache bust to get latest thumbnail
             embed.set_image(url=f"{thumbnail_url}?t={int(discord.utils.utcnow().timestamp())}")
             
         embed.set_thumbnail(url="https://w7.pngwing.com/pngs/399/867/png-transparent-twitch-logo-streaming-media-twitch-logo-miscellaneous-purple-text-thumbnail.png")
+        return embed
 
+    async def announce_stream(self, stream_info):
+        self.announce_messages = []
+        embed = self.build_embed(stream_info)
+        
         channel = None
-        # Try finding the configured channel by ID
         if self.announce_channel_id and self.announce_channel_id.isdigit():
             channel = self.bot.get_channel(int(self.announce_channel_id))
             
+        channels_to_send = []
         if not channel:
-            # Fallback algorithm if channel not set or not found
             for guild in self.bot.guilds:
-                # 1. Try system channel
-                channel = guild.system_channel
-                # 2. Try looking for 'уведомления' or 'стримы' or 'основной'
-                if not channel:
+                sys_chan = guild.system_channel
+                if sys_chan and sys_chan.permissions_for(guild.me).send_messages:
+                    channels_to_send.append(sys_chan)
+                else:
                     for text_channel in guild.text_channels:
                         name = text_channel.name.lower()
                         if any(x in name for x in ['уведомления', 'стримы', 'основной']):
                             if text_channel.permissions_for(guild.me).send_messages:
-                                channel = text_channel
+                                channels_to_send.append(text_channel)
                                 break
-                # 3. Just send to the first channel we have permission
-                if not channel:
-                    channel = next((c for c in guild.text_channels if c.permissions_for(guild.me).send_messages), None)
-                
-                if channel:
-                    await channel.send(content="@everyone 📢 Новый стрим!", embed=embed)
+                    else:
+                        first_valid = next((c for c in guild.text_channels if c.permissions_for(guild.me).send_messages), None)
+                        if first_valid:
+                            channels_to_send.append(first_valid)
         else:
-            await channel.send(content="@everyone 📢 Новый стрим!", embed=embed)
+            channels_to_send.append(channel)
+            
+        for c in channels_to_send:
+            try:
+                msg = await c.send(content="@everyone 📢 Новый стрим!", embed=embed)
+                self.announce_messages.append(msg)
+            except Exception as e:
+                logging.error(f"Failed to send stream announcement: {e}")
+
+    async def update_stream(self, stream_info):
+        if not self.announce_messages:
+            return
+        embed = self.build_embed(stream_info)
+        for msg in self.announce_messages:
+            try:
+                await msg.edit(embed=embed)
+            except Exception as e:
+                logging.error(f"Failed to update stream message: {e}")
+                
+    async def end_stream(self):
+        for msg in self.announce_messages:
+            try:
+                embed = msg.embeds[0]
+                embed.title = f"🔴 {self.twitch_channel} закончил стрим."
+                embed.description = f"Трансляция завершена. Спасибо всем, кто смотрел!\n\n👉 **[Запись стрима]({f'https://www.twitch.tv/{self.twitch_channel}'})**"
+                embed.set_image(url=None)
+                embed.color = discord.Color.dark_grey()
+                await msg.edit(content="Стрим завершен.", embed=embed)
+            except Exception as e:
+                logging.error(f"Failed to end stream message: {e}")
+        self.announce_messages = []
 
 async def setup(bot):
     await bot.add_cog(TwitchNotifier(bot))
