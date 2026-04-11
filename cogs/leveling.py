@@ -94,6 +94,57 @@ class LevelUpView(discord.ui.View):
         await interaction.response.send_message(msg, ephemeral=True)
 
 
+class ProfileView(discord.ui.View):
+    def __init__(self, target_member: discord.Member):
+        super().__init__(timeout=None)
+        self.target_member = target_member
+
+    @discord.ui.button(label="Трофеи 🏆", style=discord.ButtonStyle.primary, custom_id="profile_trophies")
+    async def show_trophies(self, interaction: discord.Interaction, button: discord.ui.Button):
+        from utils.achievements_data import ACHIEVEMENTS
+        user_achievements = await db.get_achievements(str(self.target_member.id))
+        
+        if not user_achievements:
+            await interaction.response.send_message(f"У {self.target_member.display_name} пока нет трофеев.", ephemeral=True)
+            return
+            
+        RARITY_ORDER = {"legendary": 4, "epic": 3, "rare": 2, "common": 1}
+        sorted_ach = sorted(
+            user_achievements,
+            key=lambda x: RARITY_ORDER.get(ACHIEVEMENTS.get(x, {}).get("rarity", "common"), 0),
+            reverse=True
+        )
+        
+        embed = discord.Embed(
+            title=f"🏆 Трофеи: {self.target_member.display_name}",
+            color=0xF1C40F
+        )
+        
+        desc = ""
+        rarity_icons = {"common": "⚪ Обычная", "rare": "🔵 Редкая", "epic": "🟣 Эпическая", "legendary": "🟡 Легендарная"}
+        for ach_id in sorted_ach:
+            if ach_id in ACHIEVEMENTS:
+                ach = ACHIEVEMENTS[ach_id]
+                r_icon = rarity_icons.get(ach.get("rarity", "common"), "⚪ Обычная")
+                desc += f"{ach['emoji']} **{ach['name']}** ({r_icon})\n_{ach['desc']}_\n\n"
+                
+        embed.description = desc
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="В Магазин 🛒", style=discord.ButtonStyle.secondary, custom_id="profile_shop")
+    async def go_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
+        shop_channel = discord.utils.get(interaction.guild.text_channels, name="🛒┃магазин")
+        if not shop_channel:
+            shop_channel = discord.utils.get(interaction.guild.text_channels, name="магазин")
+            
+        if shop_channel:
+            msg = f"Загляни в канал {shop_channel.mention}, чтобы потратить свои VibeКоины!"
+        else:
+            msg = "Загляни в канал магазина, чтобы потратить свои VibeКоины!"
+            
+        await interaction.response.send_message(msg, ephemeral=True)
+
+
 class Leveling(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -254,7 +305,8 @@ class Leveling(commands.Cog):
             fp.seek(0)
             
         file = discord.File(fp=fp, filename="profile.png")
-        await ctx.send(file=file)
+        view = ProfileView(member)
+        await ctx.send(file=file, view=view)
 
 async def setup(bot):
     await bot.add_cog(Leveling(bot))

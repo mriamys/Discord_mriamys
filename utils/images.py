@@ -117,21 +117,52 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     # АЧИВКИ (ТРОФЕИ)
     background.text((start_x, 240), "ТРОФЕИ:", font=font_small, color="#aaaaaa")
     
+    RARITY_ORDER = {"legendary": 4, "epic": 3, "rare": 2, "common": 1}
+    RARITY_COLORS = {
+        "common": "#95a5a6",   # серый
+        "rare": "#3498db",     # синий
+        "epic": "#9b59b6",     # фиолетовый
+        "legendary": "#f1c40f" # золотой
+    }
+    
     async def draw_medal(ach_id, index):
         if ach_id in ACHIEVEMENTS:
             try:
-                url = ACHIEVEMENTS[ach_id]["icon_url"]
+                ach_data = ACHIEVEMENTS[ach_id]
+                url = ach_data["icon_url"]
+                rarity = ach_data.get("rarity", "common")
+                ring_color = RARITY_COLORS.get(rarity, "#95a5a6")
+                
                 icon_img = await load_image_async(url)
                 icon = Editor(icon_img).resize((40, 40))
-                x_pos = start_x + 90 + (index * 50)
+                
+                x_pos = start_x + 90 + (index * 60)
+                
+                # Обводка
+                background.ellipse((x_pos - 4, 226), width=48, height=48, color=ring_color)
+                # Внутренний темный кружок под иконку
+                background.ellipse((x_pos - 1, 229), width=42, height=42, color="#2b2d31")
+                
                 background.paste(icon, (x_pos, 230))
             except Exception as e:
                 print(f"Failed to load medal {ach_id}: {e}")
 
     if user_achievements:
-        tasks = [draw_medal(ach, idx) for idx, ach in enumerate(user_achievements)]
+        sorted_ach = sorted(
+            user_achievements,
+            key=lambda x: RARITY_ORDER.get(ACHIEVEMENTS.get(x, {}).get("rarity", "common"), 0),
+            reverse=True
+        )
+        display_achievements = sorted_ach[:8]
+        
+        tasks = [draw_medal(ach, idx) for idx, ach in enumerate(display_achievements)]
         if tasks:
             await asyncio.gather(*tasks)
+            
+        if len(user_achievements) > 8:
+            extra = len(user_achievements) - 8
+            x_pos = start_x + 90 + (8 * 60)
+            background.text((x_pos + 10, 240), f"+{extra}", font=font_text, color="#f1c40f")
     else:
         background.text((start_x + 90, 240), "Пока пусто...", font=font_small, color="#555555")
             
