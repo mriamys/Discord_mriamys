@@ -57,7 +57,7 @@ class Shop(commands.Cog):
         balance = user_data.get("vibecoins", 0)
         await ctx.send(f"🪙 Твой баланс: **{balance} VibeКоинов**\nЗагляни в канал покупок, чтобы потратить их!", ephemeral=True)
 
-    @commands.command(name="setup_shop")
+    @commands.command(name="setup_shop", aliases=["setup_store", "создать_магазин", "магазин_сетап", "магаз", "магазин"])
     @commands.has_permissions(administrator=True)
     async def setup_shop(self, ctx):
         embed = discord.Embed(
