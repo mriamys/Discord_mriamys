@@ -1,67 +1,241 @@
 import discord
 from discord.ext import commands
-from discord.ui import View, Button
+from discord.ui import View, Button, Modal, TextInput, UserSelect
 from utils.db import db
-from config import COLOR_MAIN, COLOR_SUCCESS, COLOR_ERROR
+from config import COLOR_MAIN
+import asyncio
+import logging
+from datetime import timedelta
 
-# Информация о товарах в Магазине Рофлов
 SHOP_ITEMS = {
-    "nickname": {"name": "🏷️ Погоняло", "price": 1000, "desc": "Сменить ник любому участнику на 1 час. (Передача валюты)"},
-    "fake_status": {"name": "🎭 Фейковый статус", "price": 500, "desc": "Добавляет любую приписку или эмодзи к нику на 1 час."},
-    "bunker": {"name": "🏰 Личный бункер", "price": 2000, "desc": "Создает приватный текстовый канал только для тебя на 1 час."},
-    "shut_up": {"name": "🤐 Заткнись!", "price": 5000, "desc": "Выдает мут выбранному человеку на 30 секунд. Дорого и больно!"}
+    "nickname":    {"name": "🏷️ Погоняло",         "price": 1000, "desc": "Сменить ник любому участнику на 1 час."},
+    "fake_status": {"name": "🎭 Фейковый статус",   "price": 500,  "desc": "Добавляет любую приписку к твоему нику на 1 час."},
+    "bunker":      {"name": "🏰 Личный бункер",     "price": 2000, "desc": "Создаёт приватный текстовый канал только для тебя на 1 час."},
+    "shut_up":     {"name": "🤐 Заткнись!",         "price": 5000, "desc": "Выдаёт мут выбранному человеку на 30 секунд. Дорого и больно!"},
 }
+
+# ─── Вспомогательные функции ──────────────────────────────────────────────────
+
+async def check_balance(interaction, item_id):
+    """Проверяет баланс. Возвращает user_data или None."""
+    user_data = await db.get_user(str(interaction.user.id))
+    balance = user_data.get("vibecoins", 0)
+    price = SHOP_ITEMS[item_id]["price"]
+    if balance < price:
+        await interaction.response.send_message(
+            f"❌ Не хватает **VibeКоинов**! У тебя {balance}/{price} 🪙", ephemeral=True
+        )
+        return None
+    return user_data
+
+async def deduct(interaction, item_id, user_data):
+    """Списывает монеты и диспатчит ивент."""
+    price = SHOP_ITEMS[item_id]["price"]
+    new_balance = user_data.get("vibecoins", 0) - price
+    shop_spent = user_data.get("shop_spent", 0) + price
+    nick_changes = user_data.get("nick_changes", 0)
+    if item_id in ("nickname", "fake_status"):
+        nick_changes += 1
+    await db.update_user(str(interaction.user.id), vibecoins=new_balance, shop_spent=shop_spent, nick_changes=nick_changes)
+    interaction.client.dispatch("shop_purchased", interaction.user, item_id, shop_spent, nick_changes)
+    return new_balance
+
+async def refund(user_id, item_id):
+    """Возвращает монеты если что-то пошло не так."""
+    user_data = await db.get_user(str(user_id))
+    await db.update_user(str(user_id), vibecoins=user_data.get("vibecoins", 0) + SHOP_ITEMS[item_id]["price"])
+
+async def _revert_nick(member: discord.Member, original_nick: str | None, delay: int = 3600):
+    await asyncio.sleep(delay)
+    try:
+        await member.edit(nick=original_nick)
+    except Exception as e:
+        logging.warning(f"Не смог вернуть ник {member}: {e}")
+
+async def _delete_channel(channel: discord.TextChannel, delay: int = 3600):
+    await asyncio.sleep(delay)
+    try:
+        await channel.delete(reason="Личный бункер: 1 час истёк")
+    except Exception as e:
+        logging.warning(f"Не смог удалить бункер {channel}: {e}")
+
+
+# ─── 1. Погоняло ─────────────────────────────────────────────────────────────
+
+class NicknameModal(Modal, title="🏷️ Какое погоняло дать?"):
+    new_nick = TextInput(label="Новый никнейм", placeholder="Введи ник (макс. 32 символа)", max_length=32)
+
+    def __init__(self, target: discord.Member, user_data: dict):
+        super().__init__()
+        self.target = target
+        self.user_data = user_data
+
+    async def on_submit(self, interaction: discord.Interaction):
+        new_balance = await deduct(interaction, "nickname", self.user_data)
+        old_nick = self.target.nick  # None если ник не задан (используется display_name)
+        display_old = self.target.display_name
+        try:
+            await self.target.edit(nick=self.new_nick.value)
+        except discord.Forbidden:
+            await refund(interaction.user.id, "nickname")
+            await interaction.response.send_message(
+                "❌ Нет прав сменить ник этому участнику (он выше бота в иерархии).", ephemeral=True
+            )
+            return
+
+        await interaction.response.send_message(
+            f"✅ Игроку **{display_old}** дали погоняло **{self.new_nick.value}** на 1 час!\n"
+            f"Остаток: {new_balance} 🪙", ephemeral=True
+        )
+        asyncio.create_task(_revert_nick(self.target, old_nick, delay=3600))
+
+
+class NicknameSelectView(View):
+    def __init__(self, user_data: dict):
+        super().__init__(timeout=60)
+        self.user_data = user_data
+
+    @discord.ui.select(cls=UserSelect, placeholder="Выбери жертву...", min_values=1, max_values=1)
+    async def user_select(self, interaction: discord.Interaction, select: UserSelect):
+        target = interaction.guild.get_member(select.values[0].id)
+        if not target or target.bot:
+            await interaction.response.send_message("❌ Нельзя выбрать этого пользователя.", ephemeral=True)
+            return
+        if target.id == interaction.user.id:
+            await interaction.response.send_message("❌ Нельзя самому себе давать погоняло!", ephemeral=True)
+            return
+        await interaction.response.send_modal(NicknameModal(target, self.user_data))
+
+
+# ─── 2. Фейковый статус ───────────────────────────────────────────────────────
+
+class FakeStatusModal(Modal, title="🎭 Что добавить к нику?"):
+    suffix = TextInput(label="Приписка", placeholder="Например:  | ЧМО |  или  🤡", max_length=20)
+
+    def __init__(self, user_data: dict):
+        super().__init__()
+        self.user_data = user_data
+
+    async def on_submit(self, interaction: discord.Interaction):
+        new_balance = await deduct(interaction, "fake_status", self.user_data)
+        old_nick = interaction.user.nick  # None = оригинальный ник
+        display_old = interaction.user.display_name
+        new_nick_str = f"{display_old} {self.suffix.value}"[:32]
+        try:
+            await interaction.user.edit(nick=new_nick_str)
+        except discord.Forbidden:
+            await refund(interaction.user.id, "fake_status")
+            await interaction.response.send_message(
+                "❌ Не могу сменить твой ник (Owner или выше бота).", ephemeral=True
+            )
+            return
+
+        await interaction.response.send_message(
+            f"✅ К твоему нику добавлен статус **{self.suffix.value}** на 1 час!\n"
+            f"Остаток: {new_balance} 🪙", ephemeral=True
+        )
+        asyncio.create_task(_revert_nick(interaction.user, old_nick, delay=3600))
+
+
+# ─── 3. Заткнись ─────────────────────────────────────────────────────────────
+
+class ShutUpSelectView(View):
+    def __init__(self, user_data: dict):
+        super().__init__(timeout=60)
+        self.user_data = user_data
+
+    @discord.ui.select(cls=UserSelect, placeholder="Кого заткнуть?", min_values=1, max_values=1)
+    async def user_select(self, interaction: discord.Interaction, select: UserSelect):
+        target = interaction.guild.get_member(select.values[0].id)
+        if not target or target.bot:
+            await interaction.response.send_message("❌ Нельзя заткнуть этого пользователя.", ephemeral=True)
+            return
+        if target.id == interaction.user.id:
+            await interaction.response.send_message("❌ Нельзя заткнуть самого себя!", ephemeral=True)
+            return
+
+        new_balance = await deduct(interaction, "shut_up", self.user_data)
+        try:
+            await target.timeout(timedelta(seconds=30), reason=f"Куплен мут игроком {interaction.user.display_name}")
+        except discord.Forbidden:
+            await refund(interaction.user.id, "shut_up")
+            await interaction.response.send_message(
+                "❌ Нет прав заткнуть этого участника (он выше бота в иерархии).", ephemeral=True
+            )
+            return
+
+        await interaction.response.send_message(
+            f"🤐 **{target.display_name}** заткнут на **30 секунд**! Наслаждайся тишиной.\n"
+            f"Остаток: {new_balance} 🪙", ephemeral=True
+        )
+
+
+# ─── 4. Главный ShopView ──────────────────────────────────────────────────────
 
 class ShopView(View):
     def __init__(self):
         super().__init__(timeout=None)
-        
-        # Динамически создаем кнопки для каждого товара
         for item_id, item_data in SHOP_ITEMS.items():
-            button = Button(label=f"{item_data['name']} ({item_data['price']} 🪙)", style=discord.ButtonStyle.secondary, custom_id=f"shop_{item_id}")
-            button.callback = self.make_callback(item_id, item_data)
+            button = Button(
+                label=f"{item_data['name']} ({item_data['price']} 🪙)",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"shop_{item_id}"
+            )
+            button.callback = self._make_callback(item_id)
             self.add_item(button)
 
-    def make_callback(self, item_id, item_data):
-        async def button_callback(interaction: discord.Interaction):
-            user_data = await db.get_user(str(interaction.user.id))
-            balance = user_data.get("vibecoins", 0)
-            price = item_data["price"]
-            
-            if balance < price:
-                await interaction.response.send_message(f"❌ Не хватает **VibeКоинов**! У тебя {balance}/{price} 🪙", ephemeral=True)
-                return
-                
-            # Списываем баланс и учитываем траты
-            new_balance = balance - price
-            shop_spent = user_data.get("shop_spent", 0) + price
-            nick_changes = user_data.get("nick_changes", 0)
-            if item_id in ['nickname', 'fake_status']:
-                nick_changes += 1
-                
-            await db.update_user(str(interaction.user.id), vibecoins=new_balance, shop_spent=shop_spent, nick_changes=nick_changes)
-            interaction.client.dispatch("shop_purchased", interaction.user, item_id, shop_spent, nick_changes)
-            
-            # Логика выдачи роли
-            given_msg = ""
-            if "role_name" in item_data:
-                role = discord.utils.get(interaction.guild.roles, name=item_data["role_name"])
-                if role:
-                    try:
-                        await interaction.user.add_roles(role)
-                        given_msg = f"\nТебе выдана роль: {role.mention} 🎉"
-                    except Exception as e:
-                        given_msg = "\n⚠️ Возникла ошибка при выдаче роли (возможно, бот находится ниже роли в иерархии)."
-                else:
-                    given_msg = f"\n⚠️ Роль `{item_data['role_name']}` не найдена на сервере. Обратись к админам!"
-            
-            # Логика покупки (здесь просто вывод успешной покупки)
-            await interaction.response.send_message(
-                f"✅ Ты успешно купил **{item_data['name']}**!\nОстаток: {new_balance} 🪙{given_msg}\n_Если это товар-кастом (бэйдж, ник), обратись к администратору._", 
-                ephemeral=True
-            )
-            
-        return button_callback
+    def _make_callback(self, item_id: str):
+        async def callback(interaction: discord.Interaction):
+            user_data = await check_balance(interaction, item_id)
+            if user_data is None:
+                return  # check_balance уже ответил с ошибкой
+
+            if item_id == "nickname":
+                await interaction.response.send_message(
+                    "🏷️ Выбери кому давать погоняло:", view=NicknameSelectView(user_data), ephemeral=True
+                )
+
+            elif item_id == "fake_status":
+                await interaction.response.send_modal(FakeStatusModal(user_data))
+
+            elif item_id == "bunker":
+                new_balance = await deduct(interaction, "bunker", user_data)
+                guild = interaction.guild
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    interaction.user:   discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                    guild.me:           discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                }
+                try:
+                    channel = await guild.create_text_channel(
+                        f"бункер-{interaction.user.name[:15]}",
+                        overwrites=overwrites,
+                        category=interaction.channel.category,
+                        topic=f"Личный бункер {interaction.user.display_name} на 1 час 🏰"
+                    )
+                    await channel.send(
+                        f"🏰 Добро пожаловать в свой бункер, {interaction.user.mention}!\n"
+                        f"Канал самоуничтожится через **1 час**. 💣"
+                    )
+                    await interaction.response.send_message(
+                        f"✅ Бункер создан: {channel.mention}\nОстаток: {new_balance} 🪙", ephemeral=True
+                    )
+                    asyncio.create_task(_delete_channel(channel, delay=3600))
+                except discord.Forbidden:
+                    await refund(interaction.user.id, "bunker")
+                    await interaction.response.send_message(
+                        "❌ Нет прав для создания канала.", ephemeral=True
+                    )
+
+            elif item_id == "shut_up":
+                await interaction.response.send_message(
+                    "🤐 Кого хочешь заткнуть?", view=ShutUpSelectView(user_data), ephemeral=True
+                )
+
+        return callback
+
+
+# ─── Cog ─────────────────────────────────────────────────────────────────────
 
 class Shop(commands.Cog):
     def __init__(self, bot):
@@ -71,26 +245,26 @@ class Shop(commands.Cog):
     async def shop(self, ctx):
         user_data = await db.get_user(str(ctx.author.id))
         balance = user_data.get("vibecoins", 0)
-        await ctx.send(f"🪙 Твой баланс: **{balance} VibeКоинов**\nЗагляни в канал покупок, чтобы потратить их!", ephemeral=True)
+        await ctx.send(
+            f"🪙 Твой баланс: **{balance} VibeКоинов**\nЗагляни в канал покупок, чтобы потратить их!",
+            ephemeral=True
+        )
 
     @commands.command(name="setup_shop", aliases=["setup_store", "создать_магазин", "магазин_сетап", "магаз", "магазин"])
     @commands.has_permissions(administrator=True)
     async def setup_shop(self, ctx):
         embed = discord.Embed(
-            title="🛒 Магазин Рофлов", 
-            description="Здесь ты можешь потратить свои **VibeКоины** на крутые фичи!\nНажми на кнопку ниже, чтобы купить товар.",
+            title="🛒 Магазин Рофлов",
+            description="Трать **VibeКоины** на крутые штуки!\nНажми кнопку — всё происходит автоматически.",
             color=COLOR_MAIN
         )
-        
-        # Добавляем красивую гифку-баннер для магазина
         embed.set_image(url="https://media.giphy.com/media/xUPGGw7jzcqeMw5dI8/giphy.gif")
-        
         for item in SHOP_ITEMS.values():
             embed.add_field(name=f"{item['name']} — {item['price']} 🪙", value=item['desc'], inline=False)
-            
-        view = ShopView()
-        await ctx.send(embed=embed, view=view)
+
+        await ctx.send(embed=embed, view=ShopView())
         await ctx.message.delete()
+
 
 async def setup(bot):
     await bot.add_cog(Shop(bot))
