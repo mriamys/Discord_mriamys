@@ -156,12 +156,38 @@ class Leveling(commands.Cog):
         vibecoins = user_data.get('vibecoins', 0)
         voice_seconds = user_data.get('voice_time_seconds', 0)
         
-        # Добавляем текущую сессию войса в реальном времени, если он сейчас сидит
         import time
         economy_cog = self.bot.get_cog("Economy")
         if economy_cog and str(member.id) in economy_cog.voice_sessions:
-            current_session = int(time.time() - economy_cog.voice_sessions[str(member.id)])
-            voice_seconds += current_session
+            now = time.time()
+            join_time = economy_cog.voice_sessions[str(member.id)]
+            duration = int(now - join_time)
+            
+            if duration > 0:
+                old_seconds = voice_seconds
+                total_voice_time = old_seconds + duration
+                
+                old_minutes = old_seconds // 60
+                new_minutes = total_voice_time // 60
+                delta_minutes = new_minutes - old_minutes
+                
+                # Обновляем локальные переменные для отображения на картинке
+                vibecoins += (delta_minutes * 2)
+                xp += (delta_minutes * 10)
+                voice_seconds = total_voice_time
+                
+                # Обновляем данные пользователя в БД в реальном времени
+                await db.update_user(str(member.id), 
+                                     vibecoins=vibecoins, 
+                                     xp=xp, 
+                                     voice_time_seconds=total_voice_time)
+                                     
+                if delta_minutes > 0:
+                    self.bot.dispatch("xp_updated", member, xp)
+                self.bot.dispatch("voice_time_updated", member, total_voice_time)
+                
+                # Сбрасываем сессию на сейчас, чтобы избежать двойного начисления
+                economy_cog.voice_sessions[str(member.id)] = now
         
         rank_name = self.get_rank_role_name_for_level(level)
         
