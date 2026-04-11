@@ -200,19 +200,20 @@ class DiceModal(Modal, title="🎲 Кости — Ставка"):
 
 # ─── Главное меню казино ─────────────────────────────────────────────────────
 
-class CasinoView(View):
+class CasinoMenuView(View):
+    """Ephemeral menu shown when user clicks Casino button in shop."""
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__(timeout=180)
 
-    @discord.ui.button(label="🎰 Слоты", style=discord.ButtonStyle.primary, custom_id="casino_slots")
+    @discord.ui.button(label="🎰 Слоты", style=discord.ButtonStyle.primary)
     async def slots_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(SlotsModal())
 
-    @discord.ui.button(label="🪙 Монетка", style=discord.ButtonStyle.secondary, custom_id="casino_coin")
+    @discord.ui.button(label="🪙 Монетка", style=discord.ButtonStyle.secondary)
     async def coin_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(CoinModal())
 
-    @discord.ui.button(label="🎲 Кости", style=discord.ButtonStyle.success, custom_id="casino_dice")
+    @discord.ui.button(label="🎲 Кости", style=discord.ButtonStyle.success)
     async def dice_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(DiceModal())
 
@@ -223,33 +224,13 @@ class Casino(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(name="казик", aliases=["casino", "казино", "казинка"])
-    @commands.has_permissions(administrator=True)
-    async def setup_casino(self, ctx):
-        """Создаёт постоянный embed казино с кнопками (только для админов)."""
-        embed = discord.Embed(
-            title="🎰 VibeКазино",
-            description=(
-                "Испытай удачу и умножь свои **VibeКоины**!\n\n"
-                "**🎰 Слоты** — 3 барабана. Три в ряд = джекпот x12!\n"
-                "**🪙 Монетка** — 50/50. Угадай — получи x1.9\n"
-                "**🎲 Кости** — угадай число 1–6 → x5!\n\n"
-                f"Мин. ставка: **{MIN_BET} 🪙** • Макс: **{MAX_BET:,} 🪙**\n"
-                f"Кулдаун между ставками: **{COOLDOWN_SEC} сек**"
-            ),
-            color=0xF1C40F
-        )
-        embed.set_image(url="https://media.giphy.com/media/3ohzdFmHSiRBbhzaE8/giphy.gif")
-        embed.set_footer(text="Все результаты — случайные. Играй ответственно! 🍀")
-        await ctx.send(embed=embed, view=CasinoView())
-        await ctx.message.delete()
-
     @commands.hybrid_command(name="баланс", aliases=["balance", "монеты", "coins"])
     async def balance(self, ctx):
         """Показывает твой баланс VibeКоинов."""
         user_data = await db.get_user(str(ctx.author.id))
         balance   = user_data.get("vibecoins", 0)
         await ctx.send(f"🪙 Твой баланс: **{balance:,} VibeКоинов**", ephemeral=True)
+
 
 
 async def setup(bot):
