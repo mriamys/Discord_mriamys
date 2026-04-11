@@ -32,7 +32,7 @@ class Welcome(commands.Cog):
                     
                     embed = discord.Embed(
                         title="👋 Новый участник!",
-                        description=f"Добро пожаловать на сервер, {member.mention}! 🎉\nМы рады тебя видеть. Чувствуй себя как дома!",
+                        description=f"Добро пожаловать на сервер, {member.mention}! 🎉\nМы рады тебя видеть. Чувствуй себя как дома!\n\n**Обязательно выбери свои роли в канале с выдачей ролей**, чтобы получить доступ к нужным комнатам!",
                         color=COLOR_SUCCESS
                     )
                     embed.set_image(url="attachment://welcome.png")
