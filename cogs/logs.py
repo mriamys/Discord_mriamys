@@ -114,20 +114,6 @@ class Logger(commands.Cog):
             )
             await log_channel.send(embed=embed)
             
-    @commands.Cog.listener()
-    async def on_member_join(self, member):
-        log_channel = await self.get_log_channel(member.guild)
-        if not log_channel:
-            return
-
-        embed = discord.Embed(
-            title="📥 Участник вошел на сервер",
-            description=f"**Пользователь:** {member.mention} ({member})\n**ID:** {member.id}",
-            color=0x2ECC71, # Green
-            timestamp=discord.utils.utcnow()
-        )
-        embed.set_thumbnail(url=member.display_avatar.url)
-        await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_member_remove(self, member):
