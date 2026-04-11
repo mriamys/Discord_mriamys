@@ -45,6 +45,13 @@ class LevelUpView(discord.ui.View):
         vibecoins = user_data.get('vibecoins', 0)
         voice_seconds = user_data.get('voice_time_seconds', 0)
         
+        # Добавляем текущую сессию войса в реальном времени, если он сейчас сидит
+        import time
+        economy_cog = interaction.client.get_cog("Economy")
+        if economy_cog and str(interaction.user.id) in economy_cog.voice_sessions:
+            current_session = int(time.time() - economy_cog.voice_sessions[str(interaction.user.id)])
+            voice_seconds += current_session
+        
         # Получаем данные о кастомном фоне профиля (если есть)
         async with db.pool.acquire() as conn:
             async with conn.cursor() as cur:
@@ -145,6 +152,13 @@ class Leveling(commands.Cog):
         xp = user_data.get('xp', 0)
         vibecoins = user_data.get('vibecoins', 0)
         voice_seconds = user_data.get('voice_time_seconds', 0)
+        
+        # Добавляем текущую сессию войса в реальном времени, если он сейчас сидит
+        import time
+        economy_cog = self.bot.get_cog("Economy")
+        if economy_cog and str(member.id) in economy_cog.voice_sessions:
+            current_session = int(time.time() - economy_cog.voice_sessions[str(member.id)])
+            voice_seconds += current_session
         
         rank_name = self.get_rank_role_name_for_level(level)
         

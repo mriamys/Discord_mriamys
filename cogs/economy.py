@@ -15,6 +15,17 @@ class Economy(commands.Cog):
         self.msg_cooldowns = {}   # {user_id: last_msg_timestamp}
 
     @commands.Cog.listener()
+    async def on_ready(self):
+        # При запуске или рестарте бота (например, при апдейте кода), 
+        # добавляем всех кто уже сидит в войсе в сессию
+        now = time.time()
+        for guild in self.bot.guilds:
+            for vc in guild.voice_channels:
+                for member in vc.members:
+                    if not member.bot and str(member.id) not in self.voice_sessions:
+                        self.voice_sessions[str(member.id)] = now
+
+    @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
             return
