@@ -195,12 +195,13 @@ class ShopView(View):
         self.add_item(casino_btn)
 
     async def _casino_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         # Проверяем не создан ли уже канал
         guild = interaction.guild
         channel_name = f"казино-{interaction.user.name[:15]}"
         existing = discord.utils.get(guild.channels, name=channel_name.lower())
         if existing:
-            await interaction.response.send_message(f"У тебя уже есть открытый стол: {existing.mention}", ephemeral=True)
+            await interaction.followup.send(f"У тебя уже есть открытый стол: {existing.mention}", ephemeral=True)
             return
 
         overwrites = {
@@ -217,10 +218,10 @@ class ShopView(View):
                 topic=f"Личный казино-стол для {interaction.user.display_name} 🎰"
             )
         except discord.Forbidden:
-            await interaction.response.send_message("❌ У бота нет прав для создания приватного канала.", ephemeral=True)
+            await interaction.followup.send("❌ У бота нет прав для создания приватного канала.", ephemeral=True)
             return
 
-        await interaction.response.send_message(f"✅ Твой VIP-стол накрыт: {channel.mention}", ephemeral=True)
+        await interaction.followup.send(f"✅ Твой VIP-стол накрыт: {channel.mention}", ephemeral=True)
         
         embed = discord.Embed(
             title=f"🎰 Личный VIP-стол: {interaction.user.display_name}",
@@ -256,21 +257,6 @@ class ShopView(View):
                 )
 
         return callback
-
-    async def _casino_callback(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title="🎰 VibeКазино",
-            description=(
-                "Выбери игру и испытай удачу!\n\n"
-                "**🎰 Слоты** — 3 барабана. Три в ряд = джекпот **x12**!\n"
-                "**🪙 Монетка** — 50/50. Угадай — получи **x1.9**\n"
-                "**🎲 Кости** — угадай число 1–6 → **x5**!\n\n"
-                "Кулдаун: **20 сек** между ставками 🍀"
-            ),
-            color=0xF1C40F
-        )
-        from cogs.casino import CasinoMenuView
-        await interaction.response.send_message(embed=embed, view=CasinoMenuView(), ephemeral=True)
 
 
 # ─── Cog ─────────────────────────────────────────────────────────────────────
