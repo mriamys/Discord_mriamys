@@ -9,6 +9,23 @@ class DynamicRooms(commands.Cog):
         self.trigger_channel_names = ["➕ создать комнату", "➕ create", "➕ приват", "создать комнату"]
         self.dynamic_channels = [] # Список ID созданных комнат
 
+    @commands.command(name="setup_dynamic_voice", aliases=["set_privates", "приватки"])
+    @commands.has_permissions(administrator=True)
+    async def setup_dynamic_voice(self, ctx):
+        guild = ctx.guild
+        category = await guild.create_category("ПРИВАТНЫЕ КОМНАТЫ")
+        trigger_channel = await guild.create_voice_channel(
+            name="➕ создать комнату",
+            category=category
+        )
+        embed = discord.Embed(
+            title="✅ Авто-Приватки настроены",
+            description=f"Категория и канал-триггер {trigger_channel.mention} успешно созданы!\nТеперь при заходе туда бот будет создавать личные голосовые комнаты.",
+            color=0x2ecc71
+        )
+        await ctx.send(embed=embed)
+        logging.info(f"Dynamic voice category created by {ctx.author} in {guild.name}")
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         # 1. Зашел в канал создания

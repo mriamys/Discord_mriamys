@@ -6,10 +6,11 @@ from config import COLOR_MAIN, COLOR_SUCCESS, COLOR_ERROR
 
 # Информация о товарах в Магазине Рофлов
 SHOP_ITEMS = {
-    "nickname": {"name": "🏷️ Погоняло", "price": 1000, "desc": "Сменить ник любому участнику на 24 часа. (Пока реализована механика списания)"},
+    "nickname": {"name": "🏷️ Погоняло", "price": 1000, "desc": "Сменить ник любому участнику на 24 часа. (Передача валюты)"},
     "fake_status": {"name": "🎭 Фейковый статус", "price": 500, "desc": "Добавляет любую приписку или эмодзи к нику."},
     "bunker": {"name": "🏰 Личный бункер", "price": 2000, "desc": "Создает приватный текстовый канал только для тебя на 1 час."},
-    "shut_up": {"name": "🤐 Заткнись!", "price": 5000, "desc": "Выдает мут выбранному человеку на 30 секунд. Дорого и больно!"}
+    "shut_up": {"name": "🤐 Заткнись!", "price": 5000, "desc": "Выдает мут выбранному человеку на 30 секунд. Дорого и больно!"},
+    "test_role": {"name": "💎 VIP Роль", "price": 15000, "desc": "Эксклюзивная роль VIP.", "role_name": "VIP"}
 }
 
 class ShopView(View):
@@ -42,8 +43,24 @@ class ShopView(View):
             await db.update_user(str(interaction.user.id), vibecoins=new_balance, shop_spent=shop_spent, nick_changes=nick_changes)
             interaction.client.dispatch("shop_purchased", interaction.user, item_id, shop_spent, nick_changes)
             
+            # Логика выдачи роли
+            given_msg = ""
+            if "role_name" in item_data:
+                role = discord.utils.get(interaction.guild.roles, name=item_data["role_name"])
+                if role:
+                    try:
+                        await interaction.user.add_roles(role)
+                        given_msg = f"\nТебе выдана роль: {role.mention} 🎉"
+                    except Exception as e:
+                        given_msg = "\n⚠️ Возникла ошибка при выдаче роли (возможно, бот находится ниже роли в иерархии)."
+                else:
+                    given_msg = f"\n⚠️ Роль `{item_data['role_name']}` не найдена на сервере. Обратись к админам!"
+            
             # Логика покупки (здесь просто вывод успешной покупки)
-            await interaction.response.send_message(f"✅ Ты успешно купил **{item_data['name']}**!\nОстаток: {new_balance} 🪙\n_Обратись к администратору или менеджерам для активации этого рофла._", ephemeral=True)
+            await interaction.response.send_message(
+                f"✅ Ты успешно купил **{item_data['name']}**!\nОстаток: {new_balance} 🪙{given_msg}\n_Если это товар-кастом (бэйдж, ник), обратись к администратору._", 
+                ephemeral=True
+            )
             
         return button_callback
 

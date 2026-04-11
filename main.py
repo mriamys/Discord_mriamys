@@ -55,6 +55,27 @@ class MriamysBot(commands.Bot):
         logging.info(f"Logged in as {self.user} (ID: {self.user.id})")
         logging.info("Bot is ready for VibeCoding!")
 
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.CommandNotFound):
+            return
+            
+        embed = discord.Embed(title="❌ Ошибка", color=discord.Color.red())
+        
+        if isinstance(error, commands.MissingPermissions):
+            embed.description = "У вас нет подходящих прав (роли) для выполнения этой команды!"
+        elif isinstance(error, commands.MissingRequiredArgument):
+            embed.description = f"Вы пропустили обязательный аргумент: `{error.param.name}`\nНапишите `m!help` для подробностей."
+        elif isinstance(error, commands.CommandOnCooldown):
+            embed.description = f"Команда перегрелась! Подождите {error.retry_after:.1f} сек."
+        else:
+            embed.description = f"Произошла непредвиденная ошибка: `{type(error).__name__}`"
+            logging.error(f"Ignored exception in command {ctx.command}: {error}")
+            
+        try:
+            await ctx.send(embed=embed)
+        except Exception:
+            pass
+
 bot = MriamysBot()
 
 if __name__ == '__main__':

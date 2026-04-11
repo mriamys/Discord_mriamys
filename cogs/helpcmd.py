@@ -9,37 +9,48 @@ class CustomHelp(commands.Cog):
     @commands.hybrid_command(name="help", aliases=["команды", "помощь"], description="Показать список всех команд бота")
     async def help_command(self, ctx):
         embed = discord.Embed(
-            title="📚 Список команд Mriamys",
-            description="Вот все доступные команды, которые вы можете использовать:",
+            title="🌌 Путеводитель по Mriamys",
+            description="Добро пожаловать! Ниже представлен функционал бота. Большинство команд поддерживают как слэш `/команда`, так и префикс `m!команда`.",
             color=COLOR_MAIN
         )
+        embed.set_thumbnail(url=self.bot.user.display_avatar.url if self.bot.user.avatar else None)
         
         embed.add_field(
             name="🎵 Музыка",
-            value="`/play <название/ссылка>` — Включить трек (YouTube/Spotify)\n"
-                  "`/skip` — Пропустить текущий трек\n"
-                  "`/stop` — Остановить музыку и выгнать бота",
+            value="`/play <запрос/url>` — Включить трек\n"
+                  "`/skip` — Пропустить трек\n"
+                  "`/pause` / `/resume` — Пауза и продолжение\n"
+                  "`/queue` — Показать очередь\n"
+                  "`/stop` — Очистить очередь и выйти",
             inline=False
         )
         
         embed.add_field(
             name="💎 Экономика и Ранги",
-            value="`/profile` (или `!profile`) — Твоя красивая карточка с вайб-коинами, опытом и часами в войсе\n"
-                  "`/shop` — Магазин ролей за вайб-коины (покупай кастомные роли!)\n"
-                  "`/inventory` — Твой инвентарь (кастомные роли)\n"
-                  "`/buy_custom_role` — Купить право на кастомную роль (требуется название и цвет HEX)",
+            value="`/profile` — Твой профиль (уровень, коины, часы в войсе)\n"
+                  "`/shop` — Посмотреть свой баланс для магазина\n"
+                  "*(Магазин рофлов и ролей доступен в специальном канале магазина через кнопки)*",
             inline=False
         )
         
         embed.add_field(
-            name="🎮 Настройка и Управление",
-            value="`/menu` — Вызвать меню настройки ролей (игры и программирование)\n"
-                  "`/update_roles` — Принудительно обновить доступы к приватным каналам",
+            name="🎮 Настройка и Управление (Для всех)",
+            value="Пользовательские команды:\n"
+                  "`/update_roles` — Сохраняет твои роли и синхронизирует чаты\n"
+                  "*(Меню выбора ролей и языков находится в канале выдачи ролей)*",
+            inline=False
+        )
+
+        embed.add_field(
+            name="🔒 Админские команды",
+            value="`m!menu` — Заспавнить интерактивное меню ролей\n"
+                  "`m!setup_shop` — Заспавнить интерактивный магазин\n"
+                  "`m!setup_dynamic_voice` — Настроить категорию для Авто-Приваток\n"
+                  "`m!add_coins <user> <amount>` — Выдать VibeКоины",
             inline=False
         )
         
-        embed.set_footer(text="Все команды также работают через префикс '!', например !play")
-        
+        embed.set_footer(text="Mriamys Bot | Создано при поддержке Antigravity")
         await ctx.send(embed=embed)
 
 async def setup(bot):
