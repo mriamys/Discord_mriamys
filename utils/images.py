@@ -74,8 +74,22 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     background.text((start_x, 95), f"РАНГ: {safe_rank}", font=font_rank, color="#57F287")
     
     if streak > 0:
-        background.text((840, 95), f"Стрик: {streak}", font=font_rank, color="#FF5733", align="right")
-    
+        streak_text = f"Стрик: {streak}"
+        background.text((840, 95), streak_text, font=font_rank, color="#FF5733", align="right")
+        try:
+            from PIL import ImageDraw
+            draw = ImageDraw.Draw(background.image)
+            text_bbox = draw.textbbox((0, 0), streak_text, font=font_rank.font)
+            text_w = text_bbox[2] - text_bbox[0]
+            
+            fire_img_path = os.path.join(BASE_DIR, "assets", "img", "fire.png")
+            if os.path.exists(fire_img_path):
+                fire_icon_raw = await load_image_async(fire_img_path)
+                fire_icon = Editor(fire_icon_raw).resize((24, 24))
+                fire_x = 835 - text_w - 28 # Add margin
+                background.paste(fire_icon, (fire_x, 95))
+        except Exception as e:
+            print(f"Fire icon error: {e}")    
     # Уровень, Коины, XP текст
     background.text((start_x, 155), "УР.", font=font_small, color="#aaaaaa")
     background.text((start_x + 30, 145), str(level), font=font_level, color="#ffffff")
