@@ -67,6 +67,7 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     if not safe_name: safe_name = "User"
         
     safe_rank = ''.join(c for c in rank_name if ord(c) < 10000).strip()
+    safe_rank = safe_rank.replace("[]", "").strip()
     
     # Имя и Ранг
     background.text((start_x, 40), safe_name, font=font_title, color="#ffffff")
