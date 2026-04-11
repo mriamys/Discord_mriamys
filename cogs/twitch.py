@@ -213,10 +213,15 @@ class TwitchNotifier(commands.Cog):
         embed = self.build_embed(login, stream_info)
         
         channels_to_send = await self.get_announce_channels()
+        
+        if login == self.main_channel:
+            msg_content = "@everyone 📢 Я в эфире! Налетай:"
+        else:
+            msg_content = f"@everyone 📢 Пока я оффлайн, мой друг **{login}** ворвался в эфир! Зацените:"
             
         for c in channels_to_send:
             try:
-                msg = await c.send(content="@everyone 📢 Новый стрим!", embed=embed)
+                msg = await c.send(content=msg_content, embed=embed)
                 self.stream_states[login]["messages"].append({"c": msg.channel.id, "m": msg.id})
             except Exception as e:
                 logging.error(f"Failed to send stream announcement: {e}")
