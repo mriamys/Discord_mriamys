@@ -93,12 +93,14 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     background.text((start_x, 155), "УР.", font=font_small, color="#aaaaaa")
     background.text((start_x + 30, 145), str(level), font=font_level, color="#ffffff")
     
-    background.text((start_x + 80, 155), f"Коины: {vibecoins}", font=font_text, color="#F1C40F")
+    # Возвращаем любимые VibeCoins
+    background.text((start_x + 90, 155), f"VibeCoins: {vibecoins}", font=font_text, color="#F1C40F")
 
     v_hours = voice_seconds // 3600
     v_mins = (voice_seconds % 3600) // 60
-    voice_str = f"Голос: {v_hours}ч {v_mins:02d}м"
-    background.text((start_x + 240, 155), voice_str, font=font_text, color="#3498db")
+    voice_str = f"В голосе: {v_hours}ч {v_mins:02d}м"
+    # Сдвигаем влево, чтобы не перекрывало XP
+    background.text((start_x + 260, 155), voice_str, font=font_text, color="#8b9bb4")
 
     next_level_xp = ((level + 1) / 0.023) ** 2
     percentage = min(max((xp / next_level_xp) * 100, 0), 100) if next_level_xp > 0 else 0
