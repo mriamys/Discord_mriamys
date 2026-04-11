@@ -73,6 +73,9 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     background.text((start_x, 40), safe_name, font=font_title, color="#ffffff")
     background.text((start_x, 95), f"РАНГ: {safe_rank}", font=font_rank, color="#57F287")
     
+    if streak > 0:
+        background.text((840, 95), f"🔥 Стрик: {streak}", font=font_rank, color="#FF5733", align="right")
+    
     # Уровень, Коины, XP текст
     background.text((start_x, 155), "УР.", font=font_small, color="#aaaaaa")
     background.text((start_x + 30, 145), str(level), font=font_level, color="#ffffff")
@@ -83,9 +86,6 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     v_mins = (voice_seconds % 3600) // 60
     voice_str = f"В голосе: {v_hours}ч {v_mins:02d}м"
     background.text((start_x + 300, 155), voice_str, font=font_text, color="#aaaaaa")
-    
-    if streak > 0:
-        background.text((start_x + 500, 155), f"Стрик: {streak} 🔥", font=font_text, color="#FF5733")
 
     next_level_xp = ((level + 1) / 0.023) ** 2
     percentage = min(max((xp / next_level_xp) * 100, 0), 100) if next_level_xp > 0 else 0
