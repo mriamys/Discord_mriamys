@@ -110,23 +110,26 @@ class Leveling(commands.Cog):
         old_level = user_data.get('level', 0)
         new_level = self.calc_level(new_xp)
         
+        # Обновляем уровень в базе если он вырос
         if new_level > old_level:
             await db.update_user(str(member.id), level=new_level)
             
-            # Если уровень пересек порог мемного ранга
-            target_role_name = self.get_rank_role_name_for_level(new_level)
-            
-            role = discord.utils.get(member.guild.roles, name=target_role_name)
-            if role and role not in member.roles:
-                # Удаляем старые ранговые роли
-                rank_names = list(MEME_RANKS.values())
-                roles_to_remove = [r for r in member.roles if r.name in rank_names]
-                if roles_to_remove:
-                    await member.remove_roles(*roles_to_remove)
-                    
-                await member.add_roles(role)
+        # Всегда синхронизируем роль, даже если левел не апнулся 
+        # (чтобы выдавать роль "Кринж" самым новым игрокам)
+        target_role_name = self.get_rank_role_name_for_level(new_level)
+        role = discord.utils.get(member.guild.roles, name=target_role_name)
+        
+        if role and role not in member.roles:
+            # Удаляем старые ранговые роли
+            rank_names = list(MEME_RANKS.values())
+            roles_to_remove = [r for r in member.roles if r.name in rank_names]
+            if roles_to_remove:
+                await member.remove_roles(*roles_to_remove)
                 
-                # Уведомляем игрокар
+            await member.add_roles(role)
+            
+            # Уведомляем игрока о повышении ТОЛЬКО если уровень реально вырос
+            if new_level > old_level:
                 embed = discord.Embed(
                     title="🎉 НОВЫЙ РАНГ!",
                     description=f"Ты получил **{new_level}** уровень и стал **{target_role_name}**!",
