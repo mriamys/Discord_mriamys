@@ -1,0 +1,7 @@
+discord.py
+aiomysql
+yt-dlp
+spotipy
+easy-pil
+python-dotenv
+aiohttp

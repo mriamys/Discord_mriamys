@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+data/
+venv/
+.DS_Store
+.idea/
+.vscode/
+utils/profile_temp/
