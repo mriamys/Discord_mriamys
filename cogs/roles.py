@@ -20,6 +20,7 @@ GAME_OPTIONS = {
 }
 
 DEV_OPTIONS = {
+    "Программист": "💻",
     "Python": "🐍",
     "Java": "☕",
     "JavaScript": "📜",
@@ -121,9 +122,13 @@ class DevSelect(discord.ui.Select):
         member = interaction.user
         
         selected_devs = self.values
+        
+        # Роль программиста (общая)
+        base_prog_role = discord.utils.get(guild.roles, name="Программист")
+        
         # Удаляем роли
         for dev in DEV_OPTIONS.keys():
-            role_name = f"{dev} Coder"
+            role_name = "Программист" if dev == "Программист" else f"{dev} Coder"
             if dev not in selected_devs:
                 role = discord.utils.get(guild.roles, name=role_name)
                 if role and role in member.roles:
@@ -131,54 +136,74 @@ class DevSelect(discord.ui.Select):
 
         # Выдаем и создаем каналы
         for dev in selected_devs:
-            role_name = f"{dev} Coder"
+            role_name = "Программист" if dev == "Программист" else f"{dev} Coder"
             role = discord.utils.get(guild.roles, name=role_name)
             if not role:
                 role = await guild.create_role(name=role_name, mentionable=True, hoist=True, color=discord.Color.from_rgb(46, 204, 113))
             if role not in member.roles:
                 await member.add_roles(role)
                 
-            # Ищем категорию
-            cat_name = "💻┃ПРОГРАММИРОВАНИЕ"
-            category = discord.utils.get(guild.categories, name=cat_name)
-            if not category:
-                overwrites = {
-                    guild.default_role: discord.PermissionOverwrite(read_messages=False, connect=False)
-                }
-                try:
-                    category = await guild.create_category(cat_name, overwrites=overwrites)
-                    await guild.create_voice_channel("🎙️┃ОБЩИЙ ВОЙС IT", category=category)
-                except Exception as e:
-                    print(e)
-                    
-            if category:
-                # Разрешаем новой кодерской роли видеть всю категорию ПРОГРАММИРОВАНИЕ (в т.ч. общий войс)
-                try:
-                    await category.set_permissions(role, read_messages=True, connect=True)
-                except Exception:
-                    pass
-            
-            # Создаем текстовый чат, если надо
-            clean_name = dev.lower().replace("++", "pp").replace("#", "sharp")
-            chan_name = f"💬┃{clean_name}-chat"
-            existing_channel = discord.utils.get(guild.text_channels, name=chan_name)
-            
-            chan_overwrites = {
-                guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                role: discord.PermissionOverwrite(read_messages=True)
+        # Если была выбрана хотя бы одна галочка (любой ЯП или сам "Программист"), даем базовую роль "Программист"
+        if selected_devs:
+            if not base_prog_role:
+                base_prog_role = await guild.create_role(name="Программист", mentionable=True, hoist=True, color=discord.Color.from_rgb(46, 204, 113))
+            if base_prog_role not in member.roles:
+                await member.add_roles(base_prog_role)
+                
+        # Ищем категорию
+        cat_name = "💻┃ПРОГРАММИРОВАНИЕ"
+        category = discord.utils.get(guild.categories, name=cat_name)
+        if not category:
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False, connect=False)
             }
-            
-            if category and not existing_channel:
-                try:
-                    await guild.create_text_channel(chan_name, category=category, overwrites=chan_overwrites)
-                except Exception as e:
-                    print(e)
-            elif existing_channel:
-                try:
-                    await existing_channel.set_permissions(role, read_messages=True)
-                    await existing_channel.set_permissions(guild.default_role, read_messages=False)
-                except Exception:
-                    pass
+            try:
+                category = await guild.create_category(cat_name, overwrites=overwrites)
+                await guild.create_voice_channel("🎙️┃ОБЩИЙ ВОЙС IT", category=category)
+            except Exception as e:
+                print(e)
+                
+        if category:
+            # Разрешаем всем выбранным ролям видеть эту категорию
+            try:
+                # Даем доступ всем кодерам + базовому "Программист"
+                if selected_devs and base_prog_role:
+                    await category.set_permissions(base_prog_role, read_messages=True, connect=True)
+                for dev in selected_devs:
+                    role_name = "Программист" if dev == "Программист" else f"{dev} Coder"
+                    role = discord.utils.get(guild.roles, name=role_name)
+                    if role:
+                        await category.set_permissions(role, read_messages=True, connect=True)
+            except Exception:
+                pass
+            # Создаем текстовые чаты для каждого выбранного направления
+            for dev in selected_devs:
+                if dev == "Программист":
+                    continue # Для общей роли мы не создаем отдельный чат
+                    
+                role_name = f"{dev} Coder"
+                role = discord.utils.get(guild.roles, name=role_name)
+                
+                clean_name = dev.lower().replace("++", "pp").replace("#", "sharp")
+                chan_name = f"💬┃{clean_name}-chat"
+                existing_channel = discord.utils.get(guild.text_channels, name=chan_name)
+                
+                chan_overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                    role: discord.PermissionOverwrite(read_messages=True)
+                }
+                
+                if category and not existing_channel:
+                    try:
+                        await guild.create_text_channel(chan_name, category=category, overwrites=chan_overwrites)
+                    except Exception as e:
+                        print(e)
+                elif existing_channel:
+                    try:
+                        await existing_channel.set_permissions(role, read_messages=True)
+                        await existing_channel.set_permissions(guild.default_role, read_messages=False)
+                    except Exception:
+                        pass
 
         await interaction.response.send_message("Ваши роли программиста обновлены!", ephemeral=True)
 

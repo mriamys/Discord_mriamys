@@ -32,18 +32,26 @@ class HoistClient(discord.Client):
     async def on_ready(self):
         print(f'Logged in as {self.user}')
         
-        target_role_names = set()
-        for game in GAME_OPTIONS.keys():
-            target_role_names.add(game)
-        for dev in DEV_OPTIONS.keys():
-            target_role_names.add(f"{dev} Coder")
-        for rank in MEME_RANKS.values():
-            target_role_names.add(rank)
+        target_role_names = set(GAME_OPTIONS.keys())
+        target_role_names.update(MEME_RANKS.values())
+        target_role_names.add("Программист")
             
         count = 0
         for guild in self.guilds:
             for role in guild.roles:
-                if role.name in target_role_names and not role.hoist:
+                if role.is_default() or role.managed:
+                    continue
+                
+                # Check if it matches patterns
+                is_target = False
+                if role.name in target_role_names:
+                    is_target = True
+                elif role.name.endswith(" Coder"):
+                    is_target = True
+                elif role.name.startswith("[") and "]" in role.name:  # pattern for ranks like [🌫️] Кринж
+                    is_target = True
+                    
+                if is_target and not role.hoist:
                     try:
                         await role.edit(hoist=True)
                         print(f"Hoisted role: {role.name}")
