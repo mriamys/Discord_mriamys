@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import time
 import math
 import random
@@ -13,6 +13,23 @@ class Economy(commands.Cog):
         self.bot = bot
         self.voice_sessions = {}  # {user_id: join_timestamp}
         self.msg_cooldowns = {}   # {user_id: last_msg_timestamp}
+        self.save_voice_sessions.start()
+
+    def cog_unload(self):
+        self.save_voice_sessions.cancel()
+
+    @tasks.loop(minutes=2)
+    async def save_voice_sessions(self):
+        # Периодически сохраняем голосовое время, чтобы прогресс не терялся при рестарте
+        now = time.time()
+        for user_id, join_time in list(self.voice_sessions.items()):
+            duration = int(now - join_time)
+            if duration >= 60:
+                user = self.bot.get_user(int(user_id))
+                await self._process_voice_duration(user, user_id, duration)
+                # Обновляем время старта для этого юзера, если он всё еще в словаре
+                if user_id in self.voice_sessions:
+                    self.voice_sessions[user_id] = now
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -108,62 +125,69 @@ class Economy(commands.Cog):
             elif not eligible and user_id in self.voice_sessions:
                 join_time = self.voice_sessions.pop(user_id)
                 duration = int(now - join_time)
+                await self._process_voice_duration(u, user_id, duration)
+
+    async def _process_voice_duration(self, u, user_id, duration):
+        if duration <= 0:
+            return
+            
+        user_data = await db.get_user(user_id)
+        old_seconds = user_data.get('voice_time_seconds', 0)
+        total_voice_time = old_seconds + duration
+        
+        # Считаем разницу, чтобы не терялись остатки секунд при переподключениях
+        old_minutes = old_seconds // 60
+        new_minutes = total_voice_time // 60
+        delta_minutes = new_minutes - old_minutes
+        
+        # Стрик система 
+        today = datetime.utcnow().date()
+        last_daily = user_data.get('last_daily')
+        streak = user_data.get('streak', 0)
+        
+        last_daily_date = None
+        if last_daily:
+            if isinstance(last_daily, str):
+                try:
+                    last_daily_date = datetime.strptime(str(last_daily).split('.')[0], '%Y-%m-%d %H:%M:%S').date()
+                except ValueError:
+                    pass
+            else:
+                last_daily_date = getattr(last_daily, 'date', lambda: None)()
                 
-                if duration > 0:
-                    user_data = await db.get_user(user_id)
-                    old_seconds = user_data.get('voice_time_seconds', 0)
-                    total_voice_time = old_seconds + duration
-                    
-                    # Считаем разницу, чтобы не терялись остатки секунд при переподключениях
-                    old_minutes = old_seconds // 60
-                    new_minutes = total_voice_time // 60
-                    delta_minutes = new_minutes - old_minutes
-                    
-                    # Стрик система 
-                    today = datetime.utcnow().date()
-                    last_daily = user_data.get('last_daily')
-                    streak = user_data.get('streak', 0)
-                    
-                    last_daily_date = None
-                    if last_daily:
-                        if isinstance(last_daily, str):
-                            try:
-                                last_daily_date = datetime.strptime(str(last_daily).split('.')[0], '%Y-%m-%d %H:%M:%S').date()
-                            except ValueError:
-                                pass
-                        else:
-                            last_daily_date = getattr(last_daily, 'date', lambda: None)()
-                            
-                    streak_bonus = 0
-                    if last_daily_date != today:
-                        if last_daily_date == today - timedelta(days=1):
-                            streak += 1
-                        else:
-                            streak = 1
-                            
-                        last_daily = datetime.utcnow()
-                        streak_bonus = streak * 10
-                        
-                        try:
-                            self.bot.loop.create_task(u.send(f"🔥 Твой войс-стрик обновлен! Ты зашел **{streak} день подряд** и получил бонус: **{streak_bonus} 🪙**"))
-                        except:
-                            pass
-                            
-                        self.bot.dispatch("streak_updated", u, streak)
-                    
-                    new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 2) + streak_bonus
-                    new_xp = user_data.get('xp', 0) + (delta_minutes * 10)
-                    
-                    await db.update_user(user_id, 
-                                         vibecoins=new_coins, 
-                                         xp=new_xp, 
-                                         voice_time_seconds=total_voice_time,
-                                         streak=streak,
-                                         last_daily=last_daily)
-                    
-                    if delta_minutes > 0:
-                        self.bot.dispatch("xp_updated", u, new_xp)
-                    self.bot.dispatch("voice_time_updated", u, total_voice_time)
+        streak_bonus = 0
+        if last_daily_date != today:
+            if last_daily_date == today - timedelta(days=1):
+                streak += 1
+            else:
+                streak = 1
+                
+            last_daily = datetime.utcnow()
+            streak_bonus = streak * 10
+            
+            if u:
+                try:
+                    self.bot.loop.create_task(u.send(f"🔥 Твой войс-стрик обновлен! Ты зашел **{streak} день подряд** и получил бонус: **{streak_bonus} 🪙**"))
+                except:
+                    pass
+                
+                self.bot.dispatch("streak_updated", u, streak)
+        
+        new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 2) + streak_bonus
+        new_xp = user_data.get('xp', 0) + (delta_minutes * 10)
+        
+        await db.update_user(user_id, 
+                             vibecoins=new_coins, 
+                             xp=new_xp, 
+                             voice_time_seconds=total_voice_time,
+                             streak=streak,
+                             last_daily=last_daily)
+        
+        if u:
+            if delta_minutes > 0:
+                self.bot.dispatch("xp_updated", u, new_xp)
+            self.bot.dispatch("voice_time_updated", u, total_voice_time)
+
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))
