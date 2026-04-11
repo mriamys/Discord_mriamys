@@ -128,10 +128,15 @@ class DevSelect(discord.ui.Select):
         await interaction.response.send_message("Ваши роли программиста обновлены!", ephemeral=True)
 
 
-class RoleSelectionView(discord.ui.View):
+class GameRoleView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(GameSelect())
+
+
+class DevRoleView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
         self.add_item(DevSelect())
 
 
@@ -144,18 +149,30 @@ class RolesCog(commands.Cog):
     @commands.command(name="setup_roles")
     @commands.has_permissions(administrator=True)
     async def setup_roles(self, ctx):
-        embed = discord.Embed(
-            title="🎭 ВЫДАЧА РОЛЕЙ",
-            description="Выберите игры, в которые вы играете, чтобы открыть доступ к их скрытым каналам!\nТакже можете указать языки программирования, на которых пишете.",
-            color=0x2b2d31
-        )
-        embed.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
-        embed.set_image(url="https://media.discordapp.net/attachments/1118193026362097725/1155160867455701142/line.gif") # Декоративная линия
-        
-        await ctx.send(embed=embed, view=RoleSelectionView())
         await ctx.message.delete()
+        
+        # --- EMBED ДЛЯ ИГР ---
+        game_embed = discord.Embed(
+            title="🎮 ВЫБОР ИГРОВЫХ РОЛЕЙ",
+            description=">>> Выбирай игры из списка ниже, чтобы мы знали, во что ты катаешь!\n✅ **Авто-доступ:** Откроются скрытые каналы игр.\n🌐 Если каналов для твоей игры еще нет, бот создаст их сам!",
+            color=0xff4757
+        )
+        game_embed.set_image(url="https://i.pinimg.com/originals/a6/90/13/a690132b904eb12cccf80e927c7cfbc2.gif") # Красивая игровая гифка
+        
+        await ctx.send(embed=game_embed, view=GameRoleView())
+        
+        # --- EMBED ДЛЯ КОДЕРОВ ---
+        dev_embed = discord.Embed(
+            title="💻 НАВЫКИ ПРОГРАММИРОВАНИЯ",
+            description=">>> Ты из VibeCoding? Укажи языки программирования, на которых пишешь!\n🔥 Покажи всем, что ты Senior-разработчик сервера.",
+            color=0x2ed573
+        )
+        dev_embed.set_image(url="https://i.pinimg.com/originals/f3/9d/23/f39d2319bf30c4f8280695ee91b945ba.gif") # Хакерская/Кодерская гифка
+        
+        await ctx.send(embed=dev_embed, view=DevRoleView())
 
 async def setup(bot):
     await bot.add_cog(RolesCog(bot))
-    # Регистрируем View как persistent для сохранения работы после перезапуска
-    bot.add_view(RoleSelectionView())
+    # Регистрируем Views как persistent для сохранения работы после перезапуска
+    bot.add_view(GameRoleView())
+    bot.add_view(DevRoleView())
