@@ -82,7 +82,16 @@ class LevelUpView(discord.ui.View):
 
     @discord.ui.button(label="В Магазин 🛒", style=discord.ButtonStyle.secondary, custom_id="levelup_shop")
     async def go_shop(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Загляни в канал <#1152865917300731908> (или где установлен Магазин) чтобы потратить свои VibeКоины!", ephemeral=True)
+        shop_channel = discord.utils.get(interaction.guild.text_channels, name="🛒┃магазин")
+        if not shop_channel:
+            shop_channel = discord.utils.get(interaction.guild.text_channels, name="магазин")
+            
+        if shop_channel:
+            msg = f"Загляни в канал {shop_channel.mention}, чтобы потратить свои VibeКоины!"
+        else:
+            msg = "Загляни в канал магазина, чтобы потратить свои VibeКоины!"
+            
+        await interaction.response.send_message(msg, ephemeral=True)
 
 
 class Leveling(commands.Cog):
