@@ -38,8 +38,10 @@ class MriamysBot(commands.Bot):
         # Добавляем Persistent Views
         try:
             from cogs.shop import ShopView
+            from cogs.leveling import LevelUpView
             self.add_view(ShopView())
-            logging.info("Registered ShopView")
+            self.add_view(LevelUpView())
+            logging.info("Registered ShopView and LevelUpView")
         except Exception as e:
             logging.error(f"Failed to register persistent views: {e}")
             

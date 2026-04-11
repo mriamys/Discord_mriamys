@@ -31,7 +31,7 @@ MEME_RANKS = {
 }
 
 class LevelUpView(discord.ui.View):
-    def __init__(self, member):
+    def __init__(self, member=None):
         super().__init__(timeout=None)
         self.member = member
 
