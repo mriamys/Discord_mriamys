@@ -44,6 +44,10 @@ class YTDLSource(discord.PCMVolumeTransformer):
         if 'entries' in data:
             data = data['entries'][0]
 
+        duration = data.get('duration', 0)
+        if duration and duration > 600:
+            raise ValueError(f"Трек слишком длинный ({int(duration//60)} мин). Максимальная длина — 10 минут!")
+
         filename = data['url'] if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS), data=data)
 
@@ -92,19 +96,19 @@ class Music(commands.Cog):
         elif not search.startswith("http"):
             search = f"ytsearch:{search}"
 
-        async with ctx.typing():
-            try:
-                player = await YTDLSource.from_url(search, loop=self.bot.loop, stream=True)
-                if voice_client.is_playing():
-                    if ctx.guild.id not in self.queues:
-                        self.queues[ctx.guild.id] = []
-                    self.queues[ctx.guild.id].append(search)
-                    await ctx.send(embed=discord.Embed(description=f"🎵 Добавлено в очередь: **{player.title}**", color=COLOR_SUCCESS))
-                else:
-                    voice_client.play(player, after=lambda e: self.play_next(ctx))
-                    await ctx.send(embed=discord.Embed(description=f"▶️ Сейчас играет: **{player.title}**", color=COLOR_SUCCESS))
-            except Exception as e:
-                await ctx.send(embed=discord.Embed(description=f"❌ Ошибка при загрузке: {e}", color=COLOR_ERROR))
+        try:
+            player = await YTDLSource.from_url(search, loop=self.bot.loop, stream=True)
+            if voice_client.is_playing():
+                if ctx.guild.id not in self.queues:
+                    self.queues[ctx.guild.id] = []
+                self.queues[ctx.guild.id].append(search)
+                queue_len = len(self.queues[ctx.guild.id])
+                await ctx.send(embed=discord.Embed(description=f"🎵 Добавлено в очередь: **{player.title}**\n*(Треков в очереди: {queue_len})*", color=COLOR_SUCCESS))
+            else:
+                voice_client.play(player, after=lambda e: self.play_next(ctx))
+                await ctx.send(embed=discord.Embed(description=f"▶️ Сейчас играет: **{player.title}**", color=COLOR_SUCCESS))
+        except Exception as e:
+            await ctx.send(embed=discord.Embed(description=f"❌ Ошибка при загрузке: {e}", color=COLOR_ERROR))
 
     def play_next(self, ctx):
         if ctx.guild.id in self.queues and len(self.queues[ctx.guild.id]) > 0:
@@ -115,6 +119,8 @@ class Music(commands.Cog):
                 player = fut.result()
             except Exception as e:
                 logging.error(e)
+                coro_msg = ctx.send(embed=discord.Embed(description=f"❌ Пропуск битого трека: {e}", color=COLOR_ERROR))
+                asyncio.run_coroutine_threadsafe(coro_msg, self.bot.loop)
                 self.play_next(ctx)
                 return
 
