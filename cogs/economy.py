@@ -5,6 +5,7 @@ import math
 import random
 from utils.db import db
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import logging
 from config import PREFIX
 
@@ -140,20 +141,26 @@ class Economy(commands.Cog):
         new_minutes = total_voice_time // 60
         delta_minutes = new_minutes - old_minutes
         
-        # Стрик система 
-        today = datetime.utcnow().date()
+        # Стрик система (Киевское время)
+        kyiv_tz = ZoneInfo("Europe/Kyiv")
+        today = datetime.now(kyiv_tz).date()
         last_daily = user_data.get('last_daily')
         streak = user_data.get('streak', 0)
         
         last_daily_date = None
         if last_daily:
-            if isinstance(last_daily, str):
-                try:
-                    last_daily_date = datetime.strptime(str(last_daily).split('.')[0], '%Y-%m-%d %H:%M:%S').date()
-                except ValueError:
-                    pass
-            else:
-                last_daily_date = getattr(last_daily, 'date', lambda: None)()
+            try:
+                if isinstance(last_daily, str):
+                    dt_utc = datetime.strptime(str(last_daily).split('.')[0], '%Y-%m-%d %H:%M:%S')
+                else:
+                    dt_utc = last_daily
+                    
+                if dt_utc.tzinfo is None:
+                    dt_utc = dt_utc.replace(tzinfo=ZoneInfo("UTC"))
+                    
+                last_daily_date = dt_utc.astimezone(kyiv_tz).date()
+            except Exception as e:
+                print(f"Timezone error: {e}")
                 
         streak_bonus = 0
         if last_daily_date != today:
@@ -162,7 +169,7 @@ class Economy(commands.Cog):
             else:
                 streak = 1
                 
-            last_daily = datetime.utcnow()
+            last_daily = datetime.utcnow() # Сохраняем в БД как UTC для целостности
             streak_bonus = streak * 10
             
             if u:
