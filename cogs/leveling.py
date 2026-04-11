@@ -62,7 +62,14 @@ class LevelUpView(discord.ui.View):
         user_achievements = await db.get_achievements(str(interaction.user.id))
         
         image_bytes = await generate_profile_card(interaction.user, level, xp, vibecoins, rank_name, bg_color, user_achievements)
-        file = discord.File(fp=io.BytesIO(image_bytes), filename="profile.png")
+        
+        if isinstance(image_bytes, bytes):
+            fp = io.BytesIO(image_bytes)
+        else:
+            fp = image_bytes
+            fp.seek(0)
+            
+        file = discord.File(fp=fp, filename="profile.png")
         await interaction.followup.send(file=file, ephemeral=True)
 
     @discord.ui.button(label="В Магазин 🛒", style=discord.ButtonStyle.secondary, custom_id="levelup_shop")
@@ -155,7 +162,13 @@ class Leveling(commands.Cog):
         
         image_bytes = await generate_profile_card(member, level, xp, vibecoins, rank_name, bg_color, user_achievements)
         
-        file = discord.File(fp=io.BytesIO(image_bytes), filename="profile.png")
+        if isinstance(image_bytes, bytes):
+            fp = io.BytesIO(image_bytes)
+        else:
+            fp = image_bytes
+            fp.seek(0)
+            
+        file = discord.File(fp=fp, filename="profile.png")
         await ctx.send(file=file)
 
 async def setup(bot):
