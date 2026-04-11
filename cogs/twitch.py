@@ -230,10 +230,17 @@ class TwitchNotifier(commands.Cog):
         msgs = await self.get_announce_messages(login)
         if not msgs:
             return
+        
         embed = self.build_embed(login, stream_info)
+        
+        if login == self.main_channel:
+            msg_content = "@everyone 📢 Я в эфире! Налетай:"
+        else:
+            msg_content = f"@everyone 📢 Пока я оффлайн, мой друг **{login}** ворвался в эфир! Зацените:"
+            
         for msg in msgs:
             try:
-                await msg.edit(embed=embed)
+                await msg.edit(content=msg_content, embed=embed)
             except Exception as e:
                 logging.error(f"Failed to update stream message: {e}")
                 
