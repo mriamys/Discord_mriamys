@@ -129,6 +129,11 @@ class Music(commands.Cog):
             # Send message to channel where command was executed
             coro_msg = ctx.send(embed=discord.Embed(description=f"▶️ Сейчас играет: **{player.title}**", color=COLOR_SUCCESS))
             asyncio.run_coroutine_threadsafe(coro_msg, self.bot.loop)
+        else:
+            if ctx.voice_client:
+                asyncio.run_coroutine_threadsafe(ctx.voice_client.disconnect(), self.bot.loop)
+                coro_msg = ctx.send(embed=discord.Embed(description="⏹️ Очередь пуста, я покинул канал.", color=COLOR_SUCCESS))
+                asyncio.run_coroutine_threadsafe(coro_msg, self.bot.loop)
 
     @commands.hybrid_command(name="skip", description="Пропустить текущий трек")
     async def skip(self, ctx):
