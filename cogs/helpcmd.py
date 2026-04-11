@@ -6,7 +6,7 @@ class CustomHelp(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.hybrid_command(name="help", description="Показать список всех команд бота")
+    @commands.hybrid_command(name="help", aliases=["команды", "помощь"], description="Показать список всех команд бота")
     async def help_command(self, ctx):
         embed = discord.Embed(
             title="📚 Список команд Mriamys",

@@ -5,3 +5,4 @@ spotipy
 easy-pil
 python-dotenv
 aiohttp
+PyNaCl

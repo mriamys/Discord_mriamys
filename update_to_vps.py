@@ -33,6 +33,8 @@ def main():
             "git remote add origin https://github.com/mriamys/Discord_mriamys.git || true",
             "git fetch origin master",
             "git reset --hard origin/master",
+            "apt-get update && apt-get install -y ffmpeg libsodium-dev",
+            "pip3 install -r requirements.txt",
             "systemctl restart mriamys.service"
         ]
         full_cmd = " && ".join(commands)

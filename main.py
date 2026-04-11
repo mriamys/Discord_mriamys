@@ -42,6 +42,12 @@ class MriamysBot(commands.Bot):
             logging.info("Registered ShopView")
         except Exception as e:
             logging.error(f"Failed to register persistent views: {e}")
+            
+        try:
+            synced = await self.tree.sync()
+            logging.info(f"Synced {len(synced)} command(s)")
+        except Exception as e:
+            logging.error(f"Failed to sync commands: {e}")
 
     async def on_ready(self):
         logging.info(f"Logged in as {self.user} (ID: {self.user.id})")
