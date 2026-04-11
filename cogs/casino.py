@@ -21,7 +21,7 @@ def spin_slots():
 def calc_slots(bet: int, reels: list) -> tuple[int, str, str]:
     """(payout, result_line, footer)"""
     a, b, c = reels
-    line = f"[ {a}  {b}  {c} ]"
+    line = f"**[  {a}  |  {b}  |  {c}  ]**"
     
     if a == b == c:
         mults = {"7️⃣": 50.0, "💎": 25.0, "⭐": 15.0, "🔔": 10.0,
@@ -69,10 +69,12 @@ async def validate(interaction: discord.Interaction, bet_str: str) -> tuple[int 
     now     = time.time()
     last    = cooldowns.get(user_id, 0)
     if now - last < COOLDOWN_SEC:
-        ready_time = int(last + COOLDOWN_SEC)
-        await interaction.response.send_message(
-            f"⏱️ Подожди! Следующая ставка <t:{ready_time}:R>!", ephemeral=True
-        )
+        remaining = int(COOLDOWN_SEC - (now - last))
+        msg = f"⏱️ Кулдаун! Подожди ещё **{remaining} сек.**"
+        if interaction.channel.name.startswith("казино-"):
+            await interaction.response.send_message(msg, delete_after=3.0)
+        else:
+            await interaction.response.send_message(msg, ephemeral=True)
         return None, None
 
     try:
@@ -129,15 +131,20 @@ class SlotsModal(Modal, title="🎰 Слоты — Ставка"):
         balance       = await apply_result(str(interaction.user.id), user_data, bet, payout)
 
         embed = discord.Embed(title="🎰 Слоты", color=result_color(payout, bet))
-        embed.add_field(name="\u200b", value=f"## {line}", inline=False)
+        embed.add_field(name="\u200b", value=f"{line}", inline=False)
         embed.add_field(name="Результат", value=footer, inline=False)
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
         
-        if interaction.message:
+        if interaction.message and interaction.channel.name.startswith("казино-"):
             menu_embed = interaction.message.embeds[0]
-            await interaction.response.edit_message(embeds=[menu_embed, embed])
+            try:
+                await interaction.message.delete()
+            except:
+                pass
+            await interaction.response.send_message(embed=embed)
+            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
         else:
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed)
 
 
 class CoinModal(Modal):
@@ -162,11 +169,16 @@ class CoinModal(Modal):
         embed = discord.Embed(title="🪙 Монетка", description=msg, color=result_color(payout, bet))
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
         
-        if interaction.message:
+        if interaction.message and interaction.channel.name.startswith("казино-"):
             menu_embed = interaction.message.embeds[0]
-            await interaction.response.edit_message(embeds=[menu_embed, embed])
+            try:
+                await interaction.message.delete()
+            except:
+                pass
+            await interaction.response.send_message(embed=embed)
+            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
         else:
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed)
 
 
 class DiceModal(Modal):
@@ -191,11 +203,16 @@ class DiceModal(Modal):
         embed = discord.Embed(title="🎲 Кости", description=msg, color=result_color(payout, bet))
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
 
-        if interaction.message:
+        if interaction.message and interaction.channel.name.startswith("казино-"):
             menu_embed = interaction.message.embeds[0]
-            await interaction.response.edit_message(embeds=[menu_embed, embed])
+            try:
+                await interaction.message.delete()
+            except:
+                pass
+            await interaction.response.send_message(embed=embed)
+            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
         else:
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed)
 
 
 # ─── Главное меню казино ─────────────────────────────────────────────────────
