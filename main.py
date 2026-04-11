@@ -20,7 +20,7 @@ class MriamysBot(commands.Bot):
         intents.message_content = True
         intents.members = True
         intents.presences = True
-        super().__init__(command_prefix=PREFIX, intents=intents)
+        super().__init__(command_prefix=PREFIX, intents=intents, help_command=None)
 
     async def setup_hook(self):
         logging.info("Initializing Database...")
