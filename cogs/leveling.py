@@ -43,6 +43,7 @@ class LevelUpView(discord.ui.View):
         level = user_data.get('level', 0)
         xp = user_data.get('xp', 0)
         vibecoins = user_data.get('vibecoins', 0)
+        voice_seconds = user_data.get('voice_time_seconds', 0)
         
         # Получаем данные о кастомном фоне профиля (если есть)
         async with db.pool.acquire() as conn:
@@ -61,7 +62,7 @@ class LevelUpView(discord.ui.View):
         
         user_achievements = await db.get_achievements(str(interaction.user.id))
         
-        image_bytes = await generate_profile_card(interaction.user, level, xp, vibecoins, rank_name, bg_color, user_achievements)
+        image_bytes = await generate_profile_card(interaction.user, level, xp, vibecoins, voice_seconds, rank_name, bg_color, user_achievements)
         
         if isinstance(image_bytes, bytes):
             fp = io.BytesIO(image_bytes)
@@ -143,6 +144,7 @@ class Leveling(commands.Cog):
         level = user_data.get('level', 0)
         xp = user_data.get('xp', 0)
         vibecoins = user_data.get('vibecoins', 0)
+        voice_seconds = user_data.get('voice_time_seconds', 0)
         
         rank_name = self.get_rank_role_name_for_level(level)
         
@@ -160,7 +162,7 @@ class Leveling(commands.Cog):
         from utils.images import generate_profile_card
         import io
         
-        image_bytes = await generate_profile_card(member, level, xp, vibecoins, rank_name, bg_color, user_achievements)
+        image_bytes = await generate_profile_card(member, level, xp, vibecoins, voice_seconds, rank_name, bg_color, user_achievements)
         
         if isinstance(image_bytes, bytes):
             fp = io.BytesIO(image_bytes)
