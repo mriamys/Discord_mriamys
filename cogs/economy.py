@@ -26,7 +26,17 @@ class Economy(commands.Cog):
         for user_id, join_time in list(self.voice_sessions.items()):
             duration = int(now - join_time)
             if duration >= 60:
-                user = self.bot.get_user(int(user_id))
+                user = None
+                for guild in self.bot.guilds:
+                    user = guild.get_member(int(user_id))
+                    if user: break
+                    
+                if not user:
+                    user = self.bot.get_user(int(user_id))
+                    
+                if user:
+                    pass # Handled below
+                
                 await self._process_voice_duration(user, user_id, duration)
                 # Обновляем время старта для этого юзера, если он всё еще в словаре
                 if user_id in self.voice_sessions:
@@ -57,6 +67,10 @@ class Economy(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
+            return
+            
+        # Игнорируем DMs
+        if not message.guild:
             return
             
         # Игнорируем сообщения, которые начинаются как команды бота

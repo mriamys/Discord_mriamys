@@ -211,6 +211,10 @@ class Leveling(commands.Cog):
 
     @commands.hybrid_command(name="top", aliases=["топ"], description="Посмотреть списки лидеров сервера")
     async def top(self, ctx):
+        if ctx.guild is None:
+            await ctx.send("Эта команда доступна только на сервере!")
+            return
+            
         from utils.db import db
         data = await db.get_leaderboard("level", limit=10)
         embed = discord.Embed(title="🏆 ТОП-10 по Уровню", color=0x2b2d31)
@@ -247,6 +251,18 @@ class Leveling(commands.Cog):
 
     @commands.Cog.listener()
     async def on_xp_updated(self, member, new_xp):
+        # Преобразуем User в Member, если пришёл User (например, из фоновой задачи Economy)
+        if not hasattr(member, 'guild'):
+            for guild in self.bot.guilds:
+                m = guild.get_member(member.id)
+                if m:
+                    member = m
+                    break
+                    
+        # Если гильдия так и не найдена (пользователь ливнул или это DM без гильдии)
+        if not hasattr(member, 'guild'):
+            return
+
         # Событие вызывается из Economy, когда начисляется XP
         user_data = await db.get_user(str(member.id))
         old_level = user_data.get('level', 0)
