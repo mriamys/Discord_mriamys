@@ -146,28 +146,6 @@ class Leveling(commands.Cog):
                 except Exception as e:
                     logging.error(f"Could not setup rank msg: {e}")
 
-    @commands.command(name="recalc_levels")
-    @commands.has_permissions(administrator=True)
-    async def recalc_levels(self, ctx):
-        await ctx.send("Перерасчет уровней начат. Пожалуйста, подождите...")
-        import math
-        async with db.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT user_id, xp FROM users")
-                users = await cur.fetchall()
-                
-                count = 0
-                for user in users:
-                    user_xp = user["xp"]
-                    uid = user["user_id"]
-                    new_level = int(0.023 * math.sqrt(user_xp))
-                    await cur.execute("UPDATE users SET level = %s WHERE user_id = %s", (new_level, uid))
-                    count += 1
-                    
-            await conn.commit()
-            
-        await ctx.send(f"✅ Перерасчет завершен! Обновлено {count} уровней по новой формуле (0.023).")
-
     @commands.hybrid_command(name="profile", aliases=["ранг", "rank"], description="Показать твою или чужую карточку профиля")
     async def profile(self, ctx, member: discord.Member = None):
         member = member or ctx.author
