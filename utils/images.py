@@ -84,8 +84,7 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
             
             fire_img_path = os.path.join(BASE_DIR, "assets", "img", "fire.png")
             if os.path.exists(fire_img_path):
-                fire_icon_raw = await load_image_async(fire_img_path)
-                fire_icon = Editor(fire_icon_raw).resize((24, 24))
+                fire_icon = Editor(fire_img_path).resize((24, 24))
                 fire_x = 835 - text_w - 28 # Add margin
                 background.paste(fire_icon, (fire_x, 95))
         except Exception as e:
