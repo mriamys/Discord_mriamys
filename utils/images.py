@@ -74,7 +74,7 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     background.text((start_x, 95), f"РАНГ: {safe_rank}", font=font_rank, color="#57F287")
     
     if streak > 0:
-        background.text((840, 95), f"🔥 Стрик: {streak}", font=font_rank, color="#FF5733", align="right")
+        background.text((840, 95), f"Стрик: {streak}", font=font_rank, color="#FF5733", align="right")
     
     # Уровень, Коины, XP текст
     background.text((start_x, 155), "УР.", font=font_small, color="#aaaaaa")
