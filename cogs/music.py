@@ -70,9 +70,11 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(name="play", description="Воспроизвести музыку (YouTube/Spotify/Название)")
     async def play(self, ctx, *, search: str):
-        if not ctx.message.author.voice:
+        if not getattr(ctx.author, 'voice', None):
             await ctx.send(embed=discord.Embed(description="❌ Ты должен быть в голосовом канале!", color=COLOR_ERROR))
             return
+            
+        await ctx.defer()
 
         voice_client = ctx.voice_client
         if not voice_client:
@@ -124,12 +126,14 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(name="skip", description="Пропустить текущий трек")
     async def skip(self, ctx):
+        await ctx.defer()
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.stop()
             await ctx.send(embed=discord.Embed(description="⏭️ Трек пропущен.", color=COLOR_SUCCESS))
             
     @commands.hybrid_command(name="stop", description="Остановить музыку и выгнать бота")
     async def stop(self, ctx):
+        await ctx.defer()
         if ctx.voice_client:
             self.queues[ctx.guild.id] = []
             await ctx.voice_client.disconnect()

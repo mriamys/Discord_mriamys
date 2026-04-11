@@ -34,7 +34,7 @@ def main():
             "git fetch origin master",
             "git reset --hard origin/master",
             "apt-get update && apt-get install -y ffmpeg libsodium-dev",
-            "pip3 install -r requirements.txt --break-system-packages",
+            "/root/Discord_mriamys/venv/bin/pip3 install -r requirements.txt",
             "systemctl restart mriamys.service"
         ]
         full_cmd = " && ".join(commands)
