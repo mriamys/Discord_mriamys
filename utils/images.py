@@ -132,3 +132,53 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
         background.text((start_x + 90, 240), "Пока пусто...", font=font_small, color="#555555")
             
     return background.image_bytes
+
+async def generate_welcome_card(member: discord.Member) -> bytes:
+    bg_path = os.path.join(BASE_DIR, "assets", "img", "default_bg.jpg")
+    font_bold_path = os.path.join(BASE_DIR, "assets", "fonts", "Roboto-Bold.ttf")
+    font_reg_path = os.path.join(BASE_DIR, "assets", "fonts", "Roboto-Regular.ttf")
+
+    try:
+        if os.path.exists(bg_path):
+            background = Editor(bg_path).resize((800, 300))
+        else:
+            background = Editor(Canvas((800, 300), color="#1e1f22"))
+            
+        # Панель "стеклянная" в центре
+        background.rectangle((20, 20), width=760, height=260, color=(0, 0, 0, 160), radius=20)
+    except Exception as e:
+        print(f"Background error: {e}")
+        background = Editor(Canvas((800, 300), color="#2b2d31"))
+
+    font_title = Font(path=font_bold_path, size=46)
+    font_text = Font(path=font_reg_path, size=24)
+    
+    # АВАТАРКА
+    try:
+        avatar_image = await load_image_async(str(member.display_avatar.url))
+        avatar = Editor(avatar_image).resize((180, 180)).circle_image()
+        # Обводка
+        background.ellipse((55, 55), width=190, height=190, color="#ffffff")
+        background.paste(avatar, (60, 60))
+    except Exception as e:
+        print(f"Error loading avatar: {e}")
+    
+    def strip_emojis(text):
+        if not text: return ""
+        import re
+        return re.sub(r'[^\w\s,\.\!\?\#\-\[\]\(\)\:]+', '', text)
+        
+    safe_name = strip_emojis(member.display_name)
+    if not safe_name.strip(): safe_name = "User"
+    
+    text_start_x = 280
+    
+    # Текст ДОБРО ПОЖАЛОВАТЬ
+    background.text((text_start_x, 90), "ДОБРО ПОЖАЛОВАТЬ", font=font_title, color="#57F287")
+    background.text((text_start_x, 150), safe_name, font=font_text, color="#ffffff")
+    
+    # Номер участника
+    member_count = len(member.guild.members)
+    background.text((text_start_x, 200), f"Ты наш {member_count}-й участник!", font=font_text, color="#aaaaaa")
+    
+    return background.image_bytes
