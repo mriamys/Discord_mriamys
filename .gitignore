@@ -7,3 +7,8 @@ venv/
 .idea/
 .vscode/
 utils/profile_temp/
+
+# Deploy scripts
+update_to_vps.py
+deploy_bot.py
+upload_env.py
