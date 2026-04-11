@@ -71,11 +71,11 @@ async def validate(interaction: discord.Interaction, bet_str: str) -> tuple[int 
     if now - last < COOLDOWN_SEC:
         remaining = float(COOLDOWN_SEC - (now - last))
         ready_time = int(last + COOLDOWN_SEC)
-        msg = f"⏱️ Кулдаун! Следующая ставка <t:{ready_time}:R>!"
+        msg_text = f"⏱️ Кулдаун! Следующая ставка <t:{ready_time}:R>!"
         if interaction.channel.name.startswith("казино-"):
-            await interaction.response.send_message(msg, delete_after=remaining)
+            await interaction.response.send_message(msg_text, delete_after=max(1.0, remaining))
         else:
-            await interaction.response.send_message(msg, ephemeral=True)
+            await interaction.response.send_message(msg_text, ephemeral=True)
         return None, None
 
     try:
@@ -231,6 +231,18 @@ class DiceSelect(discord.ui.Select):
         super().__init__(placeholder="🎲 Какое число выпадет? (x5.5)", options=options, custom_id="casino_dice_select")
         
     async def callback(self, interaction: discord.Interaction):
+        now = time.time()
+        last = cooldowns.get(str(interaction.user.id), 0)
+        remaining = float(COOLDOWN_SEC - (now - last))
+        if remaining > 0:
+            ready_time = int(last + COOLDOWN_SEC)
+            msg_text = f"⏱️ Кулдаун! Следующая ставка <t:{ready_time}:R>!"
+            if interaction.channel.name.startswith("казино-"):
+                await interaction.response.send_message(msg_text, delete_after=max(1.0, remaining))
+            else:
+                await interaction.response.send_message(msg_text, ephemeral=True)
+            return
+            
         guess = int(self.values[0])
         await interaction.response.send_modal(DiceModal(guess))
 
@@ -240,17 +252,50 @@ class CasinoView(View):
         super().__init__(timeout=None)
         self.add_item(DiceSelect())
 
-    @discord.ui.button(label="🎰 Слоты", style=discord.ButtonStyle.primary, custom_id="casino_slots")
-    async def slots_btn(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="Слоты", emoji="🎰", style=discord.ButtonStyle.blurple, custom_id="casino_slots")
+    async def slots_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        now = time.time()
+        last = cooldowns.get(str(interaction.user.id), 0)
+        remaining = float(COOLDOWN_SEC - (now - last))
+        if remaining > 0:
+            ready_time = int(last + COOLDOWN_SEC)
+            msg_text = f"⏱️ Кулдаун! Следующая ставка <t:{ready_time}:R>!"
+            if interaction.channel.name.startswith("казино-"):
+                await interaction.response.send_message(msg_text, delete_after=max(1.0, remaining))
+            else:
+                await interaction.response.send_message(msg_text, ephemeral=True)
+            return
         await interaction.response.send_modal(SlotsModal())
 
-    @discord.ui.button(label="🦅 Орёл", style=discord.ButtonStyle.secondary, custom_id="casino_coin_heads")
-    async def coin_h_btn(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(CoinModal("орёл"))
+    @discord.ui.button(label="Орёл", emoji="🦅", style=discord.ButtonStyle.secondary, custom_id="casino_coin_heads")
+    async def coin_h_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        now = time.time()
+        last = cooldowns.get(str(interaction.user.id), 0)
+        remaining = float(COOLDOWN_SEC - (now - last))
+        if remaining > 0:
+            ready_time = int(last + COOLDOWN_SEC)
+            msg_text = f"⏱️ Кулдаун! Следующая ставка <t:{ready_time}:R>!"
+            if interaction.channel.name.startswith("казино-"):
+                await interaction.response.send_message(msg_text, delete_after=max(1.0, remaining))
+            else:
+                await interaction.response.send_message(msg_text, ephemeral=True)
+            return
+        await interaction.response.send_modal(CoinModal("Орёл"))
 
-    @discord.ui.button(label="💿 Решка", style=discord.ButtonStyle.secondary, custom_id="casino_coin_tails")
-    async def coin_t_btn(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(CoinModal("решка"))
+    @discord.ui.button(label="Решка", emoji="🪙", style=discord.ButtonStyle.secondary, custom_id="casino_coin_tails")
+    async def coin_t_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        now = time.time()
+        last = cooldowns.get(str(interaction.user.id), 0)
+        remaining = float(COOLDOWN_SEC - (now - last))
+        if remaining > 0:
+            ready_time = int(last + COOLDOWN_SEC)
+            msg_text = f"⏱️ Кулдаун! Следующая ставка <t:{ready_time}:R>!"
+            if interaction.channel.name.startswith("казино-"):
+                await interaction.response.send_message(msg_text, delete_after=max(1.0, remaining))
+            else:
+                await interaction.response.send_message(msg_text, ephemeral=True)
+            return
+        await interaction.response.send_modal(CoinModal("Решка"))
 
     @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.danger, custom_id="casino_leave")
     async def leave_btn(self, interaction: discord.Interaction, button: Button):
