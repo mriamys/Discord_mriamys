@@ -135,32 +135,23 @@ class SlotsModal(Modal, title="🎰 Слоты — Ставка"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-class CoinModal(Modal, title="🪙 Монетка — Ставка"):
+class CoinModal(Modal):
     bet_input = TextInput(
         label=f"Ставка ({MIN_BET}–{MAX_BET:,} 🪙)",
         placeholder="Введи сумму...",
         max_length=10
     )
-    choice_input = TextInput(
-        label="Орёл или Решка?",
-        placeholder="орёл / решка",
-        max_length=10
-    )
+
+    def __init__(self, choice: str):
+        super().__init__(title=f"🪙 Ставка на {choice.capitalize()}")
+        self.choice = choice
 
     async def on_submit(self, interaction: discord.Interaction):
-        choice = self.choice_input.value.strip().lower()
-        if choice not in ("орёл", "решка", "orel", "reshka"):
-            await interaction.response.send_message("❌ Напиши **орёл** или **решка**!", ephemeral=True)
-            return
-
-        # normalize English aliases
-        choice = "орёл" if choice in ("орёл", "orel") else "решка"
-
         bet, user_data = await validate(interaction, self.bet_input.value)
         if bet is None:
             return
 
-        payout, msg = flip_coin(bet, choice)
+        payout, msg = flip_coin(bet, self.choice)
         balance     = await apply_result(str(interaction.user.id), user_data, bet, payout)
 
         embed = discord.Embed(title="🪙 Монетка", description=msg, color=result_color(payout, bet))
@@ -168,32 +159,23 @@ class CoinModal(Modal, title="🪙 Монетка — Ставка"):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-class DiceModal(Modal, title="🎲 Кости — Ставка"):
+class DiceModal(Modal):
     bet_input = TextInput(
         label=f"Ставка ({MIN_BET}–{MAX_BET:,} 🪙)",
         placeholder="Введи сумму...",
         max_length=10
     )
-    guess_input = TextInput(
-        label="Угадай число (1–6) — выигрыш x5!",
-        placeholder="1, 2, 3, 4, 5 или 6",
-        max_length=1
-    )
+
+    def __init__(self, guess: int):
+        super().__init__(title=f"🎲 Ставка на число {guess}")
+        self.guess = guess
 
     async def on_submit(self, interaction: discord.Interaction):
-        try:
-            guess = int(self.guess_input.value.strip())
-            if not 1 <= guess <= 6:
-                raise ValueError
-        except ValueError:
-            await interaction.response.send_message("❌ Число должно быть от 1 до 6!", ephemeral=True)
-            return
-
         bet, user_data = await validate(interaction, self.bet_input.value)
         if bet is None:
             return
 
-        payout, msg = roll_dice(bet, guess)
+        payout, msg = roll_dice(bet, self.guess)
         balance     = await apply_result(str(interaction.user.id), user_data, bet, payout)
 
         embed = discord.Embed(title="🎲 Кости", description=msg, color=result_color(payout, bet))
@@ -203,22 +185,39 @@ class DiceModal(Modal, title="🎲 Кости — Ставка"):
 
 # ─── Главное меню казино ─────────────────────────────────────────────────────
 
+class DiceSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Выбрать 1", emoji="1️⃣", value="1"),
+            discord.SelectOption(label="Выбрать 2", emoji="2️⃣", value="2"),
+            discord.SelectOption(label="Выбрать 3", emoji="3️⃣", value="3"),
+            discord.SelectOption(label="Выбрать 4", emoji="4️⃣", value="4"),
+            discord.SelectOption(label="Выбрать 5", emoji="5️⃣", value="5"),
+            discord.SelectOption(label="Выбрать 6", emoji="6️⃣", value="6"),
+        ]
+        super().__init__(placeholder="🎲 Какое число выпадет? (x5)", options=options, custom_id="casino_dice_select")
+        
+    async def callback(self, interaction: discord.Interaction):
+        guess = int(self.values[0])
+        await interaction.response.send_modal(DiceModal(guess))
+
 class CasinoView(View):
     """Persistent menu shown when using setup_casino."""
     def __init__(self):
         super().__init__(timeout=None)
+        self.add_item(DiceSelect())
 
     @discord.ui.button(label="🎰 Слоты", style=discord.ButtonStyle.primary, custom_id="casino_slots")
     async def slots_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(SlotsModal())
 
-    @discord.ui.button(label="🪙 Монетка", style=discord.ButtonStyle.secondary, custom_id="casino_coin")
-    async def coin_btn(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(CoinModal())
+    @discord.ui.button(label="🦅 Орёл", style=discord.ButtonStyle.secondary, custom_id="casino_coin_heads")
+    async def coin_h_btn(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(CoinModal("орёл"))
 
-    @discord.ui.button(label="🎲 Кости", style=discord.ButtonStyle.success, custom_id="casino_dice")
-    async def dice_btn(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(DiceModal())
+    @discord.ui.button(label="💿 Решка", style=discord.ButtonStyle.secondary, custom_id="casino_coin_tails")
+    async def coin_t_btn(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(CoinModal("решка"))
 
     @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.danger, custom_id="casino_leave")
     async def leave_btn(self, interaction: discord.Interaction, button: Button):
