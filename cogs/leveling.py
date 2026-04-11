@@ -201,11 +201,12 @@ class Leveling(commands.Cog):
                 
         bg_color = profile_settings.get("bg_color", "#2b2d31") if profile_settings else "#2b2d31"
         user_achievements = await db.get_achievements(str(member.id))
+        streak = user_data.get('streak', 0)
         
         from utils.images import generate_profile_card
         import io
         
-        image_bytes = await generate_profile_card(member, level, xp, vibecoins, voice_seconds, rank_name, bg_color, user_achievements)
+        image_bytes = await generate_profile_card(member, level, xp, vibecoins, voice_seconds, rank_name, bg_color, user_achievements, streak)
         
         if isinstance(image_bytes, bytes):
             fp = io.BytesIO(image_bytes)

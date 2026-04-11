@@ -45,6 +45,11 @@ ACHIEVEMENTS = {
         "name": "Клавиатурный Рэмбо",
         "desc": "Написать 10,000 сообщений в чатах.",
         "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f4ac.png",
-        "emoji": "💬"
+    },
+    "no_lifer": {
+        "name": "Безработный",
+        "desc": "Заходить в голосовой канал 7 дней подряд (стрик 7🔥).",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f6cf.png",
+        "emoji": "🛋️"
     }
 }

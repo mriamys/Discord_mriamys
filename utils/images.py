@@ -6,7 +6,7 @@ from utils.achievements_data import ACHIEVEMENTS
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-async def generate_profile_card(member: discord.Member, level: int, xp: int, vibecoins: int, voice_seconds: int, rank_name: str, bg_color: str = "#2b2d31", user_achievements: list = None):
+async def generate_profile_card(member: discord.Member, level: int, xp: int, vibecoins: int, voice_seconds: int, rank_name: str, bg_color: str = "#2b2d31", user_achievements: list = None, streak: int = 0):
     if user_achievements is None:
         user_achievements = []
         
@@ -83,6 +83,9 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     v_mins = (voice_seconds % 3600) // 60
     voice_str = f"В голосе: {v_hours}ч {v_mins:02d}м"
     background.text((start_x + 300, 155), voice_str, font=font_text, color="#aaaaaa")
+    
+    if streak > 0:
+        background.text((start_x + 500, 155), f"Стрик: {streak} 🔥", font=font_text, color="#FF5733")
 
     next_level_xp = ((level + 1) / 0.023) ** 2
     percentage = min(max((xp / next_level_xp) * 100, 0), 100) if next_level_xp > 0 else 0

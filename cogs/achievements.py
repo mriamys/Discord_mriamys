@@ -70,5 +70,10 @@ class Achievements(commands.Cog):
         if vibecoins >= 10000:
             await self.grant_achievement(member, "businessman")
 
+    @commands.Cog.listener()
+    async def on_streak_updated(self, member, new_streak):
+        if new_streak >= 7:
+            await self.grant_achievement(member, "no_lifer")
+
 async def setup(bot):
     await bot.add_cog(Achievements(bot))

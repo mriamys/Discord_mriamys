@@ -119,13 +119,47 @@ class Economy(commands.Cog):
                     new_minutes = total_voice_time // 60
                     delta_minutes = new_minutes - old_minutes
                     
-                    new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 2)
+                    # Стрик система 
+                    today = datetime.utcnow().date()
+                    last_daily = user_data.get('last_daily')
+                    streak = user_data.get('streak', 0)
+                    
+                    last_daily_date = None
+                    if last_daily:
+                        if isinstance(last_daily, str):
+                            try:
+                                last_daily_date = datetime.strptime(str(last_daily).split('.')[0], '%Y-%m-%d %H:%M:%S').date()
+                            except ValueError:
+                                pass
+                        else:
+                            last_daily_date = getattr(last_daily, 'date', lambda: None)()
+                            
+                    streak_bonus = 0
+                    if last_daily_date != today:
+                        if last_daily_date == today - timedelta(days=1):
+                            streak += 1
+                        else:
+                            streak = 1
+                            
+                        last_daily = datetime.utcnow()
+                        streak_bonus = streak * 10
+                        
+                        try:
+                            self.bot.loop.create_task(u.send(f"🔥 Твой войс-стрик обновлен! Ты зашел **{streak} день подряд** и получил бонус: **{streak_bonus} 🪙**"))
+                        except:
+                            pass
+                            
+                        self.bot.dispatch("streak_updated", u, streak)
+                    
+                    new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 2) + streak_bonus
                     new_xp = user_data.get('xp', 0) + (delta_minutes * 10)
                     
                     await db.update_user(user_id, 
                                          vibecoins=new_coins, 
                                          xp=new_xp, 
-                                         voice_time_seconds=total_voice_time)
+                                         voice_time_seconds=total_voice_time,
+                                         streak=streak,
+                                         last_daily=last_daily)
                     
                     if delta_minutes > 0:
                         self.bot.dispatch("xp_updated", u, new_xp)
