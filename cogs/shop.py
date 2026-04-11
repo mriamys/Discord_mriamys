@@ -32,9 +32,15 @@ class ShopView(View):
                 await interaction.response.send_message(f"❌ Не хватает **VibeКоинов**! У тебя {balance}/{price} 🪙", ephemeral=True)
                 return
                 
-            # Списываем баланс
+            # Списываем баланс и учитываем траты
             new_balance = balance - price
-            await db.update_user(str(interaction.user.id), vibecoins=new_balance)
+            shop_spent = user_data.get("shop_spent", 0) + price
+            nick_changes = user_data.get("nick_changes", 0)
+            if item_id in ['nickname', 'fake_status']:
+                nick_changes += 1
+                
+            await db.update_user(str(interaction.user.id), vibecoins=new_balance, shop_spent=shop_spent, nick_changes=nick_changes)
+            interaction.client.dispatch("shop_purchased", interaction.user, item_id, shop_spent, nick_changes)
             
             # Логика покупки (здесь просто вывод успешной покупки)
             await interaction.response.send_message(f"✅ Ты успешно купил **{item_data['name']}**!\nОстаток: {new_balance} 🪙\n_Обратись к администратору или менеджерам для активации этого рофла._", ephemeral=True)

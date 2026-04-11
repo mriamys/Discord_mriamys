@@ -59,7 +59,9 @@ class LevelUpView(discord.ui.View):
         cog = interaction.client.get_cog("Leveling")
         rank_name = cog.get_rank_role_name_for_level(level) if cog else "Unknown"
         
-        image_bytes = await generate_profile_card(interaction.user, level, xp, vibecoins, rank_name, bg_color)
+        user_achievements = await db.get_achievements(str(interaction.user.id))
+        
+        image_bytes = await generate_profile_card(interaction.user, level, xp, vibecoins, rank_name, bg_color, user_achievements)
         file = discord.File(fp=io.BytesIO(image_bytes), filename="profile.png")
         await interaction.followup.send(file=file, ephemeral=True)
 
@@ -126,7 +128,7 @@ class Leveling(commands.Cog):
                 except Exception as e:
                     logging.error(f"Could not setup rank msg: {e}")
 
-    @commands.hybrid_command(name="profile", description="Показать твою или чужую карточку профиля")
+    @commands.hybrid_command(name="profile", aliases=["ранг", "rank"], description="Показать твою или чужую карточку профиля")
     async def profile(self, ctx, member: discord.Member = None):
         member = member or ctx.author
         user_data = await db.get_user(str(member.id))
@@ -146,11 +148,12 @@ class Leveling(commands.Cog):
                 profile_settings = await cur.fetchone()
                 
         bg_color = profile_settings.get("bg_color", "#2b2d31") if profile_settings else "#2b2d31"
+        user_achievements = await db.get_achievements(str(member.id))
         
         from utils.images import generate_profile_card
         import io
         
-        image_bytes = await generate_profile_card(member, level, xp, vibecoins, rank_name, bg_color)
+        image_bytes = await generate_profile_card(member, level, xp, vibecoins, rank_name, bg_color, user_achievements)
         
         file = discord.File(fp=io.BytesIO(image_bytes), filename="profile.png")
         await ctx.send(file=file)

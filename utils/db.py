@@ -27,7 +27,7 @@ class Database:
     async def init_tables(self):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # Таблица пользователей (Экономика и Уровни)
+                # Таблица пользователей (Экономика и Уровни + Статистика для ачивок)
                 await cur.execute('''
                     CREATE TABLE IF NOT EXISTS users (
                         user_id VARCHAR(25) PRIMARY KEY,
@@ -36,16 +36,38 @@ class Database:
                         level INT DEFAULT 0,
                         streak INT DEFAULT 0,
                         last_daily DATETIME DEFAULT NULL,
-                        voice_time_seconds INT DEFAULT 0
+                        voice_time_seconds INT DEFAULT 0,
+                        msg_count INT DEFAULT 0,
+                        shop_spent INT DEFAULT 0,
+                        nick_changes INT DEFAULT 0
                     )
                 ''')
                 
-                # Таблица кастомного профиля (если цвет профиля изменен)
+                # Добавляем колонки в существующие таблицы (если они старые)
+                try:
+                    await cur.execute("ALTER TABLE users ADD COLUMN msg_count INT DEFAULT 0")
+                    await cur.execute("ALTER TABLE users ADD COLUMN shop_spent INT DEFAULT 0")
+                    await cur.execute("ALTER TABLE users ADD COLUMN nick_changes INT DEFAULT 0")
+                except Exception:
+                    pass # Игнорируем если уже есть
+                
+                # Таблица кастомного профиля
                 await cur.execute('''
                     CREATE TABLE IF NOT EXISTS profile_settings (
                         user_id VARCHAR(25) PRIMARY KEY,
                         bg_color VARCHAR(10) DEFAULT '#2b2d31',
                         title VARCHAR(50) DEFAULT NULL,
+                        FOREIGN KEY(user_id) REFERENCES users(user_id)
+                    )
+                ''')
+                
+                # Таблица связи юзер - ачивки
+                await cur.execute('''
+                    CREATE TABLE IF NOT EXISTS user_achievements (
+                        user_id VARCHAR(25),
+                        achievement_id VARCHAR(50),
+                        date_earned DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY(user_id, achievement_id),
                         FOREIGN KEY(user_id) REFERENCES users(user_id)
                     )
                 ''')
@@ -58,8 +80,26 @@ class Database:
                 user = await cur.fetchone()
                 if not user:
                     await cur.execute("INSERT INTO users (user_id) VALUES (%s)", (str(user_id),))
-                    return {"user_id": str(user_id), "vibecoins": 0, "xp": 0, "level": 0, "streak": 0, "last_daily": None, "voice_time_seconds": 0}
+                    return {"user_id": str(user_id), "vibecoins": 0, "xp": 0, "level": 0, "streak": 0, "last_daily": None, "voice_time_seconds": 0, "msg_count": 0, "shop_spent": 0, "nick_changes": 0}
                 return user
+                
+    async def get_achievements(self, user_id: str):
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT achievement_id FROM user_achievements WHERE user_id = %s", (str(user_id),))
+                rows = await cur.fetchall()
+                return [r['achievement_id'] for r in rows] if rows else []
+
+    async def add_achievement(self, user_id: str, achievement_id: str) -> bool:
+        """Возвращает True если ачивка новая и добавлена, False если уже была."""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                try:
+                    await cur.execute("INSERT INTO user_achievements (user_id, achievement_id) VALUES (%s, %s)", (str(user_id), achievement_id))
+                    return True
+                except Exception:
+                    # Duplicate entry
+                    return False
                 
     async def update_user(self, user_id: str, **kwargs):
         if not kwargs: return

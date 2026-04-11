@@ -23,11 +23,14 @@ class Economy(commands.Cog):
         new_coins = user_data.get('vibecoins', 0) + 2
         # 5-10 XP за сообщение
         new_xp = user_data.get('xp', 0) + 5
+        # Статы для ачивок
+        new_msg_count = user_data.get('msg_count', 0) + 1
         
-        await db.update_user(str(message.author.id), vibecoins=new_coins, xp=new_xp)
+        await db.update_user(str(message.author.id), vibecoins=new_coins, xp=new_xp, msg_count=new_msg_count)
         
         # Вызываем диспетчер проверки уровня (это будет ловить Cog Leveling)
         self.bot.dispatch("xp_updated", message.author, new_xp)
+        self.bot.dispatch("message_sent", message.author, new_msg_count)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -60,6 +63,7 @@ class Economy(commands.Cog):
                                          voice_time_seconds=total_voice_time)
                     
                     self.bot.dispatch("xp_updated", member, new_xp)
+                    self.bot.dispatch("voice_time_updated", member, total_voice_time)
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))
