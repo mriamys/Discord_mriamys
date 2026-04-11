@@ -21,6 +21,7 @@ GAME_OPTIONS = {
 
 DEV_OPTIONS = {
     "Программист": "💻",
+    "Вайбкодер": "👾",
     "Python": "🐍",
     "JavaScript": "📜",
     "TypeScript": "📘",
