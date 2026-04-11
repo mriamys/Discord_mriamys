@@ -16,13 +16,24 @@ class Economy(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # При запуске или рестарте бота (например, при апдейте кода), 
-        # добавляем всех кто уже сидит в войсе в сессию
+        # При запуске или рестарте бота проверяем, кто уже сидит в войсе с соблюдением правил (анти-абуз)
         now = time.time()
         for guild in self.bot.guilds:
             for vc in guild.voice_channels:
+                non_bots = [m for m in vc.members if not m.bot]
                 for member in vc.members:
-                    if not member.bot and str(member.id) not in self.voice_sessions:
+                    if member.bot:
+                        continue
+                        
+                    eligible = True
+                    if guild.afk_channel and vc.id == guild.afk_channel.id:
+                        eligible = False
+                    elif getattr(member.voice, 'self_deaf', False) or getattr(member.voice, 'deaf', False):
+                        eligible = False
+                    elif len(non_bots) < 2:
+                        eligible = False
+                        
+                    if eligible and str(member.id) not in self.voice_sessions:
                         self.voice_sessions[str(member.id)] = now
 
     @commands.Cog.listener()
@@ -62,36 +73,63 @@ class Economy(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        if member.bot:
-            return
+        # Чтобы проверять одиночество в канале (анти-абуз),
+        # мы должны перепроверять всех участников в каналах "до" и "после" изменения.
+        users_to_check = {member}
+        if before.channel:
+            users_to_check.update(before.channel.members)
+        if after.channel:
+            users_to_check.update(after.channel.members)
             
-        user_id = str(member.id)
+        now = time.time()
         
-        # Зашел в канал
-        if before.channel is None and after.channel is not None:
-            self.voice_sessions[user_id] = time.time()
-            
-        # Вышел из канала
-        elif before.channel is not None and after.channel is None:
-            if user_id in self.voice_sessions:
-                join_time = self.voice_sessions.pop(user_id)
-                duration = int(time.time() - join_time)
+        for u in users_to_check:
+            if u.bot:
+                continue
                 
-                # За каждую минуту (60 сек) даем 2 VibeКоина и 10 XP
-                minutes = duration // 60
-                if minutes > 0:
+            eligible = False
+            if u.voice and u.voice.channel:
+                if u.guild.afk_channel and u.voice.channel.id == u.guild.afk_channel.id:
+                    eligible = False
+                elif u.voice.self_deaf or u.voice.deaf:
+                    eligible = False
+                else:
+                    non_bots = [m for m in u.voice.channel.members if not m.bot]
+                    if len(non_bots) >= 2:
+                        eligible = True
+                        
+            user_id = str(u.id)
+            
+            # Начинаем трекать, если стал eligible
+            if eligible and user_id not in self.voice_sessions:
+                self.voice_sessions[user_id] = now
+                
+            # Заканчиваем трекать, если перестал быть eligible (вышел, замутился, остался один в канале)
+            elif not eligible and user_id in self.voice_sessions:
+                join_time = self.voice_sessions.pop(user_id)
+                duration = int(now - join_time)
+                
+                if duration > 0:
                     user_data = await db.get_user(user_id)
-                    new_coins = user_data.get('vibecoins', 0) + (minutes * 2)
-                    new_xp = user_data.get('xp', 0) + (minutes * 10)
-                    total_voice_time = user_data.get('voice_time_seconds', 0) + duration
+                    old_seconds = user_data.get('voice_time_seconds', 0)
+                    total_voice_time = old_seconds + duration
+                    
+                    # Считаем разницу, чтобы не терялись остатки секунд при переподключениях
+                    old_minutes = old_seconds // 60
+                    new_minutes = total_voice_time // 60
+                    delta_minutes = new_minutes - old_minutes
+                    
+                    new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 2)
+                    new_xp = user_data.get('xp', 0) + (delta_minutes * 10)
                     
                     await db.update_user(user_id, 
                                          vibecoins=new_coins, 
                                          xp=new_xp, 
                                          voice_time_seconds=total_voice_time)
                     
-                    self.bot.dispatch("xp_updated", member, new_xp)
-                    self.bot.dispatch("voice_time_updated", member, total_voice_time)
+                    if delta_minutes > 0:
+                        self.bot.dispatch("xp_updated", u, new_xp)
+                    self.bot.dispatch("voice_time_updated", u, total_voice_time)
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))
