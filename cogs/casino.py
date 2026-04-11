@@ -13,7 +13,7 @@ COOLDOWN_SEC = 20  # сек между ставками
 
 # ─── Слоты: символы + веса + множители ──────────────────────────────────────
 SYMBOLS      = ["🍒", "🍋", "🍊", "🍇", "🔔", "⭐", "💎", "7️⃣"]
-WEIGHTS      = [ 40,   30,   20,   12,    8,    5,    2,    1]
+WEIGHTS      = [ 35,   30,   20,   12,    8,    5,    3,    1]
 
 def spin_slots():
     return random.choices(SYMBOLS, weights=WEIGHTS, k=3)
@@ -25,19 +25,19 @@ def calc_slots(bet: int, reels: list) -> tuple[int, str, str]:
     
     if a == b == c:
         mults = {"7️⃣": 50.0, "💎": 25.0, "⭐": 15.0, "🔔": 10.0,
-                 "🍇": 5.0,  "🍊": 4.0, "🍋": 3.0, "🍒": 2.0}
-        mult = mults.get(a, 2.0)
+                 "🍇": 5.0,  "🍊": 4.0, "🍋": 3.0, "🍒": 2.5}
+        mult = mults.get(a, 2.5)
         payout = int(bet * mult)
-        msg = f"🎰 **ДЖЕКПОТ!!!** x{mult:.0f}" if mult >= 15 else f"✨ **Три в ряд!** x{mult:.0f}"
+        msg = f"🎰 **ДЖЕКПОТ!!!** x{mult:.0f}" if mult >= 15 else f"✨ **Три в ряд!** x{mult:.1f}"
         return payout, line, f"{msg} — выигрыш **{payout:,} 🪙**!"
     
     elif a == b:
-        payout = int(bet * 1.5)
-        return payout, line, f"🎯 Два совпадения слева — x1.5 — выигрыш **{payout:,} 🪙**"
+        payout = bet * 2
+        return payout, line, f"🎯 Два совпадения слева — x2 — выигрыш **{payout:,} 🪙**"
     
     elif a == "🍒":
-        payout = int(bet * 0.5)
-        return payout, line, f"🍒 Первая вишенка спасает! Утешительный возврат: **{payout:,} 🪙**"
+        payout = bet
+        return payout, line, f"🍒 Первая вишенка спасает! Возврат ставки: **{payout:,} 🪙**"
         
     return 0, line, "❌ Мимо! Попробуй ещё раз."
 
@@ -46,18 +46,18 @@ def flip_coin(bet: int, choice: str) -> tuple[int, str]:
     result = random.choice(["Орёл", "Решка"])
     icons  = {"Орёл": "🦅", "Решка": "💿"}
     won    = result.lower() == choice.lower()
-    payout = int(bet * 1.9) if won else 0
+    payout = int(bet * 1.95) if won else 0
     icon   = icons[result]
-    msg    = f"{icon} Выпало **{result}**! {'🥳 Победа! +**' + str(payout) + ' 🪙**' if won else '💔 Проигрыш.'}"
+    msg    = f"{icon} Выпало **{result}**! {'🥳 Победа! **x1.95** +**' + str(payout) + ' 🪙**' if won else '💔 Проигрыш.'}"
     return payout, msg
 
 def roll_dice(bet: int, guess: int) -> tuple[int, str]:
     result      = random.randint(1, 6)
     dice_emojis = ["⚀","⚁","⚂","⚃","⚄","⚅"]
     won         = result == guess
-    payout      = int(bet * 5.0) if won else 0
+    payout      = int(bet * 5.5) if won else 0
     icon        = dice_emojis[result - 1]
-    msg = f"{icon} Выпало **{result}**! {'🎉 Угадал! x5 — +**' + str(payout) + ' 🪙**!' if won else f'💔 Промах. Ты ставил на {guess}.'}"
+    msg = f"{icon} Выпало **{result}**! {'🎉 Угадал! **x5.5** — +**' + str(payout) + ' 🪙**!' if won else f'💔 Промах. Ты ставил на {guess}.'}"
     return payout, msg
 
 # ─── Валидация ────────────────────────────────────────────────────────────────
@@ -69,9 +69,9 @@ async def validate(interaction: discord.Interaction, bet_str: str) -> tuple[int 
     now     = time.time()
     last    = cooldowns.get(user_id, 0)
     if now - last < COOLDOWN_SEC:
-        remaining = int(COOLDOWN_SEC - (now - last))
+        ready_time = int(last + COOLDOWN_SEC)
         await interaction.response.send_message(
-            f"⏱️ Подожди ещё **{remaining} сек** перед следующей ставкой!", ephemeral=True
+            f"⏱️ Подожди! Следующая ставка <t:{ready_time}:R>!", ephemeral=True
         )
         return None, None
 
@@ -132,7 +132,12 @@ class SlotsModal(Modal, title="🎰 Слоты — Ставка"):
         embed.add_field(name="\u200b", value=f"## {line}", inline=False)
         embed.add_field(name="Результат", value=footer, inline=False)
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        if interaction.message:
+            menu_embed = interaction.message.embeds[0]
+            await interaction.response.edit_message(embeds=[menu_embed, embed])
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 class CoinModal(Modal):
@@ -156,7 +161,12 @@ class CoinModal(Modal):
 
         embed = discord.Embed(title="🪙 Монетка", description=msg, color=result_color(payout, bet))
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        
+        if interaction.message:
+            menu_embed = interaction.message.embeds[0]
+            await interaction.response.edit_message(embeds=[menu_embed, embed])
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 class DiceModal(Modal):
@@ -180,7 +190,12 @@ class DiceModal(Modal):
 
         embed = discord.Embed(title="🎲 Кости", description=msg, color=result_color(payout, bet))
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        if interaction.message:
+            menu_embed = interaction.message.embeds[0]
+            await interaction.response.edit_message(embeds=[menu_embed, embed])
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ─── Главное меню казино ─────────────────────────────────────────────────────
@@ -195,7 +210,7 @@ class DiceSelect(discord.ui.Select):
             discord.SelectOption(label="Выбрать 5", emoji="5️⃣", value="5"),
             discord.SelectOption(label="Выбрать 6", emoji="6️⃣", value="6"),
         ]
-        super().__init__(placeholder="🎲 Какое число выпадет? (x5)", options=options, custom_id="casino_dice_select")
+        super().__init__(placeholder="🎲 Какое число выпадет? (x5.5)", options=options, custom_id="casino_dice_select")
         
     async def callback(self, interaction: discord.Interaction):
         guess = int(self.values[0])
