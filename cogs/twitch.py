@@ -11,20 +11,29 @@ class TwitchNotifier(commands.Cog):
         self.bot = bot
         self.client_id = os.getenv("TWITCH_CLIENT_ID")
         self.client_secret = os.getenv("TWITCH_CLIENT_SECRET")
-        self.twitch_channel = os.getenv("TWITCH_CHANNEL", "mriamys")
+        self.main_channel = os.getenv("TWITCH_CHANNEL", "mriamys").lower()
+        self.friend_channels = ["findmeq", "fafikxs", "xloret"]
         self.announce_channel_id = os.getenv("TWITCH_ANNOUNCE_CHANNEL_ID")
         
-        self.is_live = False
         self.app_access_token = None
-        self.announce_messages = []
-        self._saved_messages = []
+        
+        # State structure:
+        # {
+        #   "mriamys": {"is_live": False, "messages": [{"c": 123, "m": 456}]},
+        #   "findmeq": {"is_live": False, "messages": []},
+        #   ...
+        # }
+        self.stream_states = {}
+        for ch in [self.main_channel] + self.friend_channels:
+            self.stream_states[ch] = {"is_live": False, "messages": []}
+            
         self.state_file = "data/twitch_state.json"
         
         # Загружаем сохраненные данные, чтобы не спамить после перезапуска
         self.load_state()
         
         if self.client_id and self.client_secret:
-            logging.info(f"TwitchNotifier enabled for channel: {self.twitch_channel}")
+            logging.info(f"TwitchNotifier enabled for channels: {[self.main_channel] + self.friend_channels}")
             self.check_twitch.start()
         else:
             logging.warning("TwitchNotifier is disabled because TWITCH_CLIENT_ID or TWITCH_CLIENT_SECRET is not set in .env")
@@ -33,36 +42,43 @@ class TwitchNotifier(commands.Cog):
         self.check_twitch.cancel()
 
     def save_state(self):
-        # Если announce_messages пуст, возможно мы загрузили из файла и еще не получали объекты Message, сохраняем сырые
-        saved_list = [{"c": m.channel.id, "m": m.id} for m in self.announce_messages] if self.announce_messages else self._saved_messages
         os.makedirs("data", exist_ok=True)
-        with open(self.state_file, "w") as f:
-            json.dump({"is_live": self.is_live, "announce_messages": saved_list}, f)
+        # We save raw stream dictionary so it's JSON serializable
+        try:
+            with open(self.state_file, "w") as f:
+                json.dump(self.stream_states, f)
+        except Exception as e:
+            logging.error(f"Error saving twitch state: {e}")
 
     def load_state(self):
         if os.path.exists(self.state_file):
             try:
                 with open(self.state_file, "r") as f:
                     data = json.load(f)
-                    self.is_live = data.get("is_live", False)
-                    self._saved_messages = data.get("announce_messages", [])
+                    for ch, state in data.items():
+                        if ch in self.stream_states:
+                            self.stream_states[ch] = state
             except Exception as e:
                 logging.error(f"Error loading twitch state: {e}")
 
-    async def get_announce_messages(self):
-        if self.announce_messages:
-            return self.announce_messages
+    async def get_announce_messages(self, channel_login):
+        state = self.stream_states.get(channel_login)
+        if not state: return []
         
         msgs = []
-        for info in self._saved_messages:
+        valid_records = []
+        for info in state["messages"]:
             try:
                 channel = self.bot.get_channel(info["c"])
                 if channel:
                     msg = await channel.fetch_message(info["m"])
                     msgs.append(msg)
+                    valid_records.append(info)
             except Exception:
                 pass
-        self.announce_messages = msgs
+                
+        # Remove deleted messages from state
+        state["messages"] = valid_records
         return msgs
 
     async def get_access_token(self):
@@ -87,7 +103,10 @@ class TwitchNotifier(commands.Cog):
             if not success:
                 return
                 
-        url = f"https://api.twitch.tv/helix/streams?user_login={self.twitch_channel}"
+        logins = [self.main_channel] + self.friend_channels
+        query = "&".join([f"user_login={login}" for login in logins])
+        url = f"https://api.twitch.tv/helix/streams?{query}"
+        
         headers = {
             "Client-ID": self.client_id,
             "Authorization": f"Bearer {self.app_access_token}"
@@ -104,21 +123,30 @@ class TwitchNotifier(commands.Cog):
                     if response.status == 200:
                         data = await response.json()
                         streams = data.get("data", [])
-                        is_currently_live = len(streams) > 0
+                        live_users = {s["user_login"].lower(): s for s in streams}
                         
-                        if is_currently_live:
-                            stream_info = streams[0]
-                            if not self.is_live:
-                                self.is_live = True
-                                logging.info(f"Twitch channel {self.twitch_channel} just went LIVE!")
-                                await self.announce_stream(stream_info)
-                                self.save_state()
-                            else:
-                                await self.update_stream(stream_info)
-                        elif not is_currently_live and self.is_live:
-                            self.is_live = False
-                            logging.info(f"Twitch channel {self.twitch_channel} went offline.")
-                            await self.end_stream()
+                        changed = False
+                        
+                        for login in logins:
+                            state = self.stream_states[login]
+                            is_currently_live = login in live_users
+                            
+                            if is_currently_live:
+                                stream_info = live_users[login]
+                                if not state["is_live"]:
+                                    state["is_live"] = True
+                                    changed = True
+                                    logging.info(f"Twitch channel {login} just went LIVE!")
+                                    await self.announce_stream(login, stream_info)
+                                else:
+                                    await self.update_stream(login, stream_info)
+                            elif not is_currently_live and state["is_live"]:
+                                state["is_live"] = False
+                                changed = True
+                                logging.info(f"Twitch channel {login} went offline.")
+                                await self.end_stream(login)
+                                
+                        if changed:
                             self.save_state()
                     else:
                         logging.error(f"Twitch API returned HTTP {response.status}")
@@ -129,7 +157,7 @@ class TwitchNotifier(commands.Cog):
     async def before_check(self):
         await self.bot.wait_until_ready()
 
-    def build_embed(self, stream_info):
+    def build_embed(self, login, stream_info):
         title = stream_info.get("title", "Трансляция началась!")
         game = stream_info.get("game_name", "Just Chatting")
         viewer_count = stream_info.get("viewer_count", 0)
@@ -137,9 +165,9 @@ class TwitchNotifier(commands.Cog):
         thumbnail_url = stream_info.get("thumbnail_url", "").replace("{width}", "1280").replace("{height}", "720")
         
         embed = discord.Embed(
-            title=f"🔴 {self.twitch_channel} онлайн на Twitch!",
-            description=f"**{title}**\n\n🎮 Категория: **{game}**\n👥 Зрителей прямо сейчас: **{viewer_count}**\n\n👉 **[Присоединяйся к просмотру!]({f'https://www.twitch.tv/{self.twitch_channel}'})**",
-            url=f"https://www.twitch.tv/{self.twitch_channel}",
+            title=f"🔴 {login} онлайн на Twitch!",
+            description=f"**{title}**\n\n🎮 Категория: **{game}**\n👥 Зрителей прямо сейчас: **{viewer_count}**\n\n👉 **[Присоединяйся к просмотру!]({f'https://www.twitch.tv/{login}'})**",
+            url=f"https://www.twitch.tv/{login}",
             color=0x9146FF
         )
         
@@ -149,10 +177,7 @@ class TwitchNotifier(commands.Cog):
         embed.set_thumbnail(url="https://w7.pngwing.com/pngs/399/867/png-transparent-twitch-logo-streaming-media-twitch-logo-miscellaneous-purple-text-thumbnail.png")
         return embed
 
-    async def announce_stream(self, stream_info):
-        self.announce_messages = []
-        embed = self.build_embed(stream_info)
-        
+    async def get_announce_channels(self):
         channel = None
         if self.announce_channel_id and self.announce_channel_id.isdigit():
             channel = self.bot.get_channel(int(self.announce_channel_id))
@@ -176,39 +201,56 @@ class TwitchNotifier(commands.Cog):
                             channels_to_send.append(first_valid)
         else:
             channels_to_send.append(channel)
+        return channels_to_send
+
+    async def announce_stream(self, login, stream_info):
+        self.stream_states[login]["messages"] = []
+        embed = self.build_embed(login, stream_info)
+        
+        channels_to_send = await self.get_announce_channels()
             
         for c in channels_to_send:
             try:
                 msg = await c.send(content="@everyone 📢 Новый стрим!", embed=embed)
-                self.announce_messages.append(msg)
+                self.stream_states[login]["messages"].append({"c": msg.channel.id, "m": msg.id})
             except Exception as e:
                 logging.error(f"Failed to send stream announcement: {e}")
 
-    async def update_stream(self, stream_info):
-        msgs = await self.get_announce_messages()
+    async def update_stream(self, login, stream_info):
+        msgs = await self.get_announce_messages(login)
         if not msgs:
             return
-        embed = self.build_embed(stream_info)
+        embed = self.build_embed(login, stream_info)
         for msg in msgs:
             try:
                 await msg.edit(embed=embed)
             except Exception as e:
                 logging.error(f"Failed to update stream message: {e}")
                 
-    async def end_stream(self):
-        msgs = await self.get_announce_messages()
+    async def end_stream(self, login):
+        msgs = await self.get_announce_messages(login)
         for msg in msgs:
             try:
-                embed = msg.embeds[0]
-                embed.title = f"🔴 {self.twitch_channel} закончил стрим."
-                embed.description = f"Трансляция завершена. Спасибо всем, кто смотрел!\n\n👉 **[Запись стрима]({f'https://www.twitch.tv/{self.twitch_channel}'})**"
-                embed.set_image(url=None)
-                embed.color = discord.Color.dark_grey()
-                await msg.edit(content="Стрим завершен.", embed=embed)
+                # Если это главный стример (твой аккаунт)
+                if login == self.main_channel:
+                    embed = msg.embeds[0]
+                    embed.title = f"🔴 {login} закончил стрим."
+                    friends_links = "\n".join([f"• [{f}](https://www.twitch.tv/{f})" for f in self.friend_channels])
+                    embed.description = f"Трансляция завершена. Спасибо всем, кто смотрел!\n\n**Пока меня нет, заглядывайте к моим друзьям:**\n{friends_links}"
+                    embed.set_image(url=None)
+                    embed.color = discord.Color.dark_grey()
+                    await msg.edit(content="Стрим завершен.", embed=embed)
+                else:
+                    # Если стрим друга закончился, удаляем уведомление
+                    await msg.delete()
+            except discord.NotFound:
+                pass
             except Exception as e:
                 logging.error(f"Failed to end stream message: {e}")
-        self.announce_messages = []
-        self._saved_messages = []
+        
+        if login != self.main_channel:
+            # Для друзей полностью очищаем список сообщений, так как они удалены
+            self.stream_states[login]["messages"] = []
 
 async def setup(bot):
     await bot.add_cog(TwitchNotifier(bot))
