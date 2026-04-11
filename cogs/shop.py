@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord.ui import View, Button, Modal, TextInput, UserSelect
 from utils.db import db
 from config import COLOR_MAIN
-from cogs.casino import CasinoMenuView
 import asyncio
 import logging
 from datetime import timedelta
@@ -183,31 +182,6 @@ class ShopView(View):
             )
             button.callback = self._make_callback(item_id)
             self.add_item(button)
-        # Казино — бесплатная кнопка входа
-        casino_btn = Button(
-            label="🎰 Казино",
-            style=discord.ButtonStyle.success,
-            custom_id="shop_casino"
-        )
-        casino_btn.callback = self._casino_callback
-        self.add_item(casino_btn)
-
-
-    async def _casino_callback(self, interaction: discord.Interaction):
-        user_data = await db.get_user(str(interaction.user.id))
-        balance = user_data.get("vibecoins", 0)
-        embed = discord.Embed(
-            title="🎰 VibeCoinо",
-            description=(
-                f"🪙 Твой баланс: **{balance:,} 🪙**\n\n"
-                "🎰 **Слоты** — 3 барабана. Три в ряд = джекпот **x12**!\n"
-                "🪙 **Монетка** — 50/50. Угадай и получи **x1.9**\n"
-                "🎲 **Кости** — угадай число 1–6, выигрыш **x5**!\n\n"
-                "Мин. ставка **10 🪙** • Макс. **10,000 🪙** • Кулдаун **20 сек**"
-            ),
-            color=0xF1C40F
-        )
-        await interaction.response.send_message(embed=embed, view=CasinoMenuView(), ephemeral=True)
 
     def _make_callback(self, item_id: str):
         async def callback(interaction: discord.Interaction):

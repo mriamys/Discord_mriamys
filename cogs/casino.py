@@ -13,13 +13,7 @@ COOLDOWN_SEC = 20  # сек между ставками
 
 # ─── Слоты: символы + веса + множители ──────────────────────────────────────
 SYMBOLS      = ["🍒", "🍋", "🍊", "🍇", "🔔", "⭐", "💎", "7️⃣"]
-WEIGHTS      = [ 30,   25,   20,   12,    7,    4,    2,    1]
-MULTIPLIERS  = {
-    "7️⃣": 12.0, "💎": 8.0, "⭐": 6.0, "🔔": 5.0,
-    "🍇": 4.0,  "🍊": 3.0, "🍋": 2.5, "🍒": 2.0,
-}
-
-# ─── Игровая логика ───────────────────────────────────────────────────────────
+WEIGHTS      = [ 40,   30,   20,   12,    8,    5,    2,    1]
 
 def spin_slots():
     return random.choices(SYMBOLS, weights=WEIGHTS, k=3)
@@ -28,16 +22,25 @@ def calc_slots(bet: int, reels: list) -> tuple[int, str, str]:
     """(payout, result_line, footer)"""
     a, b, c = reels
     line = f"[ {a}  {b}  {c} ]"
+    
     if a == b == c:
-        mult = MULTIPLIERS[a]
+        mults = {"7️⃣": 50.0, "💎": 25.0, "⭐": 15.0, "🔔": 10.0,
+                 "🍇": 5.0,  "🍊": 4.0, "🍋": 3.0, "🍒": 2.0}
+        mult = mults.get(a, 2.0)
         payout = int(bet * mult)
-        if a == "7️⃣":
-            return payout, line, f"🎰 **ДЖЕКПОТ!!!** x{mult:.0f} — ты победил **{payout:,} 🪙**!"
-        return payout, line, f"✨ **Три в ряд!** x{mult} — +**{payout:,} 🪙**!"
-    elif a == b or b == c or a == c:
-        payout = int(bet * 1.3)
-        return payout, line, f"🎯 Два совпадения — x1.3 — +**{payout:,} 🪙**"
+        msg = f"🎰 **ДЖЕКПОТ!!!** x{mult:.0f}" if mult >= 15 else f"✨ **Три в ряд!** x{mult:.0f}"
+        return payout, line, f"{msg} — выигрыш **{payout:,} 🪙**!"
+    
+    elif a == b:
+        payout = int(bet * 1.5)
+        return payout, line, f"🎯 Два совпадения слева — x1.5 — выигрыш **{payout:,} 🪙**"
+    
+    elif a == "🍒":
+        payout = int(bet * 0.5)
+        return payout, line, f"🍒 Первая вишенка спасает! Утешительный возврат: **{payout:,} 🪙**"
+        
     return 0, line, "❌ Мимо! Попробуй ещё раз."
+
 
 def flip_coin(bet: int, choice: str) -> tuple[int, str]:
     result = random.choice(["Орёл", "Решка"])
@@ -200,20 +203,20 @@ class DiceModal(Modal, title="🎲 Кости — Ставка"):
 
 # ─── Главное меню казино ─────────────────────────────────────────────────────
 
-class CasinoMenuView(View):
-    """Ephemeral menu shown when user clicks Casino button in shop."""
+class CasinoView(View):
+    """Persistent menu shown when using setup_casino."""
     def __init__(self):
-        super().__init__(timeout=180)
+        super().__init__(timeout=None)
 
-    @discord.ui.button(label="🎰 Слоты", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="🎰 Слоты", style=discord.ButtonStyle.primary, custom_id="casino_slots")
     async def slots_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(SlotsModal())
 
-    @discord.ui.button(label="🪙 Монетка", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="🪙 Монетка", style=discord.ButtonStyle.secondary, custom_id="casino_coin")
     async def coin_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(CoinModal())
 
-    @discord.ui.button(label="🎲 Кости", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="🎲 Кости", style=discord.ButtonStyle.success, custom_id="casino_dice")
     async def dice_btn(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(DiceModal())
 
@@ -223,6 +226,27 @@ class CasinoMenuView(View):
 class Casino(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    @commands.command(name="казик", aliases=["casino", "казино", "казинка"])
+    @commands.has_permissions(administrator=True)
+    async def setup_casino(self, ctx):
+        """Создаёт постоянный embed казино с кнопками (только для админов)."""
+        embed = discord.Embed(
+            title="🎰 VibeКазино",
+            description=(
+                "Присаживайся за стол и умножай свои **VibeКоины**!\n\n"
+                "**🎰 Слоты** — классика. 3 в ряд до **x50**, 2 слева = **x1.5**\n"
+                "**🪙 Монетка** — 50/50. Угадай — получи **x1.9**\n"
+                "**🎲 Кости** — угадай число 1–6 и получи **x5**!\n\n"
+                f"Мин. ставка: **{MIN_BET} 🪙** • Макс: **{MAX_BET:,} 🪙**\n"
+                f"Кулдаун между ставками: **{COOLDOWN_SEC} сек**"
+            ),
+            color=0xF1C40F
+        )
+        embed.set_image(url="https://media.giphy.com/media/3ohzdFmHSiRBbhzaE8/giphy.gif")
+        embed.set_footer(text="Все результаты — случайные. Играй ответственно! 🍀")
+        await ctx.send(embed=embed, view=CasinoView())
+        await ctx.message.delete()
 
     @commands.hybrid_command(name="баланс", aliases=["balance", "монеты", "coins"])
     async def balance(self, ctx):
