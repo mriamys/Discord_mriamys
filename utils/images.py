@@ -89,16 +89,12 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
                 background.paste(fire_icon, (fire_x, 95))
         except Exception as e:
             print(f"Fire icon error: {e}")    
-    # Уровень, Коины, XP текст
-    # VibeCoins и Голос перенесены на отдельную линию для лучшего вида
-    vc_icon = "🪙"
-    voice_icon = "🎙️"
-    
-    background.text((start_x, 125), f"{vc_icon} VibeКоины: {vibecoins}", font=font_text, color="#F1C40F")
+    # Уровень, Коины, XP текст (эмодзи убраны — Pillow их не рендерит, дает квадратики)
+    background.text((start_x, 125), f"VibeКоины: {vibecoins}", font=font_text, color="#F1C40F")
     
     v_hours = voice_seconds // 3600
     v_mins = (voice_seconds % 3600) // 60
-    voice_str = f"{voice_icon} В войсе: {v_hours}ч {v_mins:02d}м"
+    voice_str = f"В войсе: {v_hours}ч {v_mins:02d}м"
     background.text((start_x + 220, 125), voice_str, font=font_text, color="#A6A1FD")
 
     # Уровень и опыт
