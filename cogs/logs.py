@@ -113,6 +113,36 @@ class Logger(commands.Cog):
                 timestamp=discord.utils.utcnow()
             )
             await log_channel.send(embed=embed)
+            
+    @commands.Cog.listener()
+    async def on_member_join(self, member):
+        log_channel = await self.get_log_channel(member.guild)
+        if not log_channel:
+            return
+
+        embed = discord.Embed(
+            title="📥 Участник вошел на сервер",
+            description=f"**Пользователь:** {member.mention} ({member})\n**ID:** {member.id}",
+            color=0x2ECC71, # Green
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        await log_channel.send(embed=embed)
+
+    @commands.Cog.listener()
+    async def on_member_remove(self, member):
+        log_channel = await self.get_log_channel(member.guild)
+        if not log_channel:
+            return
+
+        embed = discord.Embed(
+            title="📤 Участник покинул сервер",
+            description=f"**Пользователь:** {member.mention} ({member})\n**ID:** {member.id}",
+            color=0xE74C3C, # Red
+            timestamp=discord.utils.utcnow()
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        await log_channel.send(embed=embed)
 
 async def setup(bot):
     await bot.add_cog(Logger(bot))
