@@ -7,6 +7,17 @@ import asyncio
 import random
 import logging
 
+def get_duel_embed():
+    return discord.Embed(
+        title="⚔️ Дуэльный Клуб",
+        description=(
+            "Выбери жертву из списка ниже и введи сумму ставки.\n"
+            "Если оппонент примет вызов - вы скидываетесь в общий банк и бот кидает кости.\n"
+            "Победитель забирает всё!"
+        ),
+        color=discord.Color.dark_red()
+    )
+
 class DuelAcceptView(View):
     def __init__(self, challenger: discord.Member, target: discord.Member, bet: int, room_channel: discord.TextChannel):
         super().__init__(timeout=300) # 5 минут на принятие
@@ -100,7 +111,7 @@ class DuelAcceptView(View):
 
 class DuelBetModal(Modal):
     def __init__(self, challenger: discord.Member, target: discord.Member, balance: int):
-        super().__init__(title=f"Ставка (Баланс: {balance})")
+        super().__init__(title=f"Ставка (Баланс: {balance:,})")
         self.challenger = challenger
         self.target = target
         
@@ -131,9 +142,18 @@ class DuelBetModal(Modal):
             return
 
         await interaction.response.send_message(
-            f"⚔️ {self.target.mention}, тебя вызывает на дуэль {self.challenger.mention}!\nСтавка: **{bet} 🪙**. Победитель забирает всё!",
+            f"⚔️ {self.target.mention}, тебя вызывает на дуэль {self.challenger.mention}!\nСтавка: **{bet:,} 🪙**. Победитель забирает всё!",
             view=DuelAcceptView(self.challenger, self.target, bet, interaction.channel)
         )
+
+        # Переотправляем меню вниз
+        if interaction.message and interaction.channel.name.startswith("⚔️┃дуэль-"):
+            try:
+                await interaction.message.delete()
+                embed = get_duel_embed()
+                await interaction.channel.send(content=self.challenger.mention, embed=embed, view=DuelRoomView(self.challenger.id))
+            except:
+                pass
 
 class DuelRoomView(View):
     def __init__(self, author_id: int):
@@ -211,15 +231,7 @@ class Duels(commands.Cog):
 
         await interaction.followup.send(f"✅ Комната создана: {channel.mention}", ephemeral=True)
         
-        embed = discord.Embed(
-            title="⚔️ Дуэльный Клуб",
-            description=(
-                "Выбери жертву из списка ниже и введи сумму ставки.\n"
-                "Если оппонент примет вызов - вы скидываетесь в общий банк и бот кидает кости.\n"
-                "Победитель забирает всё!"
-            ),
-            color=discord.Color.dark_red()
-        )
+        embed = get_duel_embed()
         
         await channel.send(content=interaction.user.mention, embed=embed, view=DuelRoomView(interaction.user.id))
 
