@@ -25,6 +25,7 @@ class MriamysBot(commands.Bot):
     async def setup_hook(self):
         logging.info("Initializing Database...")
         await db.connect()
+        await db.init_tables()
         
         logging.info("Loading Cogs...")
         for filename in os.listdir('./cogs'):

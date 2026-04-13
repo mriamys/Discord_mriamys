@@ -45,15 +45,20 @@ class Database:
                     )
                 ''')
                 
-                # Добавляем колонки в существующие таблицы (если они старые)
-                try:
-                    await cur.execute("ALTER TABLE users ADD COLUMN msg_count INT DEFAULT 0")
-                    await cur.execute("ALTER TABLE users ADD COLUMN shop_spent INT DEFAULT 0")
-                    await cur.execute("ALTER TABLE users ADD COLUMN nick_changes INT DEFAULT 0")
-                    await cur.execute("ALTER TABLE users ADD COLUMN casino_spent INT DEFAULT 0")
-                    await cur.execute("ALTER TABLE users ADD COLUMN casino_wins INT DEFAULT 0")
-                except Exception:
-                    pass # Игнорируем если уже есть
+                # Добавляем колонки в существующие таблицы по одной
+                columns_to_add = [
+                    ("msg_count", "INT DEFAULT 0"),
+                    ("shop_spent", "INT DEFAULT 0"),
+                    ("nick_changes", "INT DEFAULT 0"),
+                    ("casino_spent", "INT DEFAULT 0"),
+                    ("casino_wins", "INT DEFAULT 0")
+                ]
+                
+                for col_name, col_type in columns_to_add:
+                    try:
+                        await cur.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+                    except Exception:
+                        pass # Колонка уже существует
                 
                 # Таблица кастомного профиля
                 await cur.execute('''
