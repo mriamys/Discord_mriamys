@@ -53,7 +53,7 @@ async def _revert_nick(member: discord.Member, original_nick: str | None, delay:
     except Exception as e:
         logging.warning(f"Не смог вернуть ник {member}: {e}")
 
-async def _delete_channel(channel: discord.TextChannel, delay: int = 3600):
+async def _delete_channel(channel: discord.TextChannel, delay: int = 1800):
     await asyncio.sleep(delay)
     try:
         await channel.delete(reason="Время стола/Бункера истёкло")
@@ -194,7 +194,7 @@ class ShopView(View):
         await interaction.response.defer(ephemeral=True)
         # Проверяем не создан ли уже канал
         guild = interaction.guild
-        channel_name = f"казино-{interaction.user.name[:15]}"
+        channel_name = f"🎰┃казино-{interaction.user.name[:10]}"
         existing = discord.utils.get(guild.channels, name=channel_name.lower())
         if existing:
             await interaction.followup.send(f"У тебя уже есть открытый стол: {existing.mention}", ephemeral=True)
@@ -232,7 +232,7 @@ class ShopView(View):
         )
         embed.set_image(url="https://media.giphy.com/media/3ohzdFmHSiRBbhzaE8/giphy.gif")
         await channel.send(content=interaction.user.mention, embed=embed, view=CasinoView())
-        asyncio.create_task(_delete_channel(channel, 3600))
+        asyncio.create_task(_delete_channel(channel, 1800))
 
     def _make_callback(self, item_id: str):
         async def callback(interaction: discord.Interaction):

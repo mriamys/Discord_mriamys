@@ -18,7 +18,11 @@ def get_case_embed() -> discord.Embed:
             "💿 **Серебро (5,000 🪙):** выигрыш от 1,000 до 15,000\n"
             "🔮 **Нефрит (8,000 🪙):** выигрыш от 2,000 до 30,000\n"
             "🏵️ **Золото (10,000 🪙):** выигрыш от 3,000 до 40,000\n"
-            "💎 **Бриллиант (50,000 🪙):** выигрыш от 10,000 до 250,000\n\n"
+            "💎 **Бриллиант (50,000 🪙):** выигрыш от 10,000 до 250,000\n"
+            "🟢 **Изумруд (100,000 🪙):** выигрыш от 25,000 до 600,000\n"
+            "🔴 **Рубин (250,000 🪙):** выигрыш от 50,000 до 1,500,000\n"
+            "🧿 **Сапфир (500,000 🪙):** выигрыш от 100,000 до 3,000,000\n"
+            "🌌 **Vibe Ultimate (1,000,000 🪙):** выигрыш от 250,000 до 7,000,000\n\n"
             "Жми кнопку ниже, чтобы попытать удачу. Когда надоест - жми Выйти."
         ),
         color=COLOR_MAIN
@@ -144,6 +148,22 @@ class CaseView(View):
     async def btn_diamond(self, interaction: discord.Interaction, button: Button):
         await self._handle_case(interaction, 50000, 10000, 250000, "Бриллиантового Кейса", "💎")
 
+    @discord.ui.button(label="Изумруд (100k 🪙)", style=discord.ButtonStyle.secondary, emoji="🟢", row=1)
+    async def btn_emerald(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 100000, 25000, 600000, "Изумрудного Кейса", "🟢")
+
+    @discord.ui.button(label="Рубин (250k 🪙)", style=discord.ButtonStyle.secondary, emoji="🔴", row=1)
+    async def btn_ruby(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 250000, 50000, 1500000, "Рубинового Кейса", "🔴")
+
+    @discord.ui.button(label="Сапфир (500k 🪙)", style=discord.ButtonStyle.primary, emoji="🧿", row=2)
+    async def btn_sapphire(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 500000, 100000, 3000000, "Сапфирового Кейса", "🧿")
+
+    @discord.ui.button(label="Ultimate (1M 🪙)", style=discord.ButtonStyle.success, emoji="🌌", row=2)
+    async def btn_ultimate(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 1000000, 250000, 7000000, "Vibe Ultimate Кейса", "🌌")
+
     @discord.ui.button(label="Выйти", style=discord.ButtonStyle.danger, emoji="🚪", row=2)
     async def btn_close(self, interaction: discord.Interaction, button: Button):
         if str(interaction.user.id) != self.user_id and not interaction.user.guild_permissions.administrator:
@@ -196,7 +216,7 @@ class Cases(commands.Cog):
 
         # Автоудаление комнаты через час
         async def _delete_channel():
-            await asyncio.sleep(3600)
+            await asyncio.sleep(1800)
             try:
                 await channel.delete(reason="Время комнаты вышло")
             except:

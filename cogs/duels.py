@@ -193,7 +193,7 @@ class Duels(commands.Cog):
             return
 
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            guild.default_role: discord.PermissionOverwrite(read_messages=True, send_messages=False, add_reactions=False),
             interaction.user:   discord.PermissionOverwrite(read_messages=True, send_messages=True),
             guild.me:           discord.PermissionOverwrite(read_messages=True, send_messages=True),
         }
@@ -203,7 +203,7 @@ class Duels(commands.Cog):
                 channel_name,
                 overwrites=overwrites,
                 category=interaction.channel.category,
-                topic=f"Личная комната для дуэлей ⚔️"
+                topic=f"🥷 Публичная арена для дуэлей"
             )
         except discord.Forbidden:
             await interaction.followup.send("❌ У бота нет прав для создания приватного канала.", ephemeral=True)
@@ -224,7 +224,7 @@ class Duels(commands.Cog):
         await channel.send(content=interaction.user.mention, embed=embed, view=DuelRoomView(interaction.user.id))
 
         async def _delete_channel():
-            await asyncio.sleep(3600)
+            await asyncio.sleep(1800)
             try:
                 await channel.delete(reason="Время дуэльной комнаты вышло")
             except:
