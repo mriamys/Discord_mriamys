@@ -39,7 +39,9 @@ class Database:
                         voice_time_seconds INT DEFAULT 0,
                         msg_count INT DEFAULT 0,
                         shop_spent INT DEFAULT 0,
-                        nick_changes INT DEFAULT 0
+                        nick_changes INT DEFAULT 0,
+                        casino_spent INT DEFAULT 0,
+                        casino_wins INT DEFAULT 0
                     )
                 ''')
                 
@@ -48,6 +50,8 @@ class Database:
                     await cur.execute("ALTER TABLE users ADD COLUMN msg_count INT DEFAULT 0")
                     await cur.execute("ALTER TABLE users ADD COLUMN shop_spent INT DEFAULT 0")
                     await cur.execute("ALTER TABLE users ADD COLUMN nick_changes INT DEFAULT 0")
+                    await cur.execute("ALTER TABLE users ADD COLUMN casino_spent INT DEFAULT 0")
+                    await cur.execute("ALTER TABLE users ADD COLUMN casino_wins INT DEFAULT 0")
                 except Exception:
                     pass # Игнорируем если уже есть
                 
@@ -80,7 +84,7 @@ class Database:
                 user = await cur.fetchone()
                 if not user:
                     await cur.execute("INSERT INTO users (user_id) VALUES (%s)", (str(user_id),))
-                    return {"user_id": str(user_id), "vibecoins": 0, "xp": 0, "level": 0, "streak": 0, "last_daily": None, "voice_time_seconds": 0, "msg_count": 0, "shop_spent": 0, "nick_changes": 0}
+                    return {"user_id": str(user_id), "vibecoins": 0, "xp": 0, "level": 0, "streak": 0, "last_daily": None, "voice_time_seconds": 0, "msg_count": 0, "shop_spent": 0, "nick_changes": 0, "casino_spent": 0, "casino_wins": 0}
                 return user
                 
     async def get_achievements(self, user_id: str):

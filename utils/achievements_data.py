@@ -217,8 +217,8 @@ ACHIEVEMENTS = \
         "emoji": "🛒",
         "rarity": "common"
     },
-    "ludoman": {
-        "name": "Лудоман",
+    "shop_ludoman": {
+        "name": "Шопоголик",
         "desc": "Потратить 5,000 VibeКоинов в Магазине.",
         "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f3b0.png",
         "emoji": "🎰",
@@ -573,5 +573,26 @@ ACHIEVEMENTS = \
         "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f6e1.png",
         "emoji": "🛡️",
         "rarity": "epic"
+    },
+    "casino_10k": {
+        "name": "Азартный игрок",
+        "desc": "Потратить 10,000 VibeКоинов в казино.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f3b2.png",
+        "emoji": "🎲",
+        "rarity": "rare"
+    },
+    "casino_ludoman": {
+        "name": "Лудоман",
+        "desc": "Потратить 100,000 VibeКоинов в казино. Режим терминальной стадии.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f0cf.png",
+        "emoji": "🃏",
+        "rarity": "legendary"
+    },
+    "casino_jackpot": {
+        "name": "Счастливчик",
+        "desc": "Выбить джекпот x50 в слотах! Математика бессильна.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f3af.png",
+        "emoji": "🎯",
+        "rarity": "legendary"
     }
 }

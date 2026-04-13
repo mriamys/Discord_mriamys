@@ -10,7 +10,8 @@ class Achievements(commands.Cog):
         
         self.msg_thresholds = {1: 'first_msg', 10: 'msg_10', 50: 'msg_50', 100: 'msg_100', 250: 'msg_250', 500: 'msg_500', 1000: 'msg_1000', 2500: 'msg_2500', 5000: 'msg_5000', 10000: 'keyboard_rambo', 20000: 'msg_20000', 50000: 'msg_50000', 100000: 'msg_100000', 250000: 'msg_250000', 500000: 'msg_500000', 1000000: 'msg_1000000'}
         self.voice_thresholds = {600: 'voice_10m', 3600: 'voice_1h', 18000: 'chair_glued', 36000: 'voice_10h', 86400: 'voice_24h', 180000: 'voice_50h', 241200: 'voice_67h', 360000: 'voice_100h', 900000: 'voice_250h', 1800000: 'voice_500h', 3600000: 'voice_1000h', 18000000: 'voice_5000h'}
-        self.shop_thresholds = {100: 'store_100', 500: 'store_500', 1000: 'store_1000', 5000: 'ludoman', 20000: 'store_20000', 50000: 'store_50000', 100000: 'store_100000', 500000: 'store_500000', 1000000: 'store_1000000'}
+        self.shop_thresholds = {100: 'store_100', 500: 'store_500', 1000: 'store_1000', 5000: 'shop_ludoman', 20000: 'store_20000', 50000: 'store_50000', 100000: 'store_100000', 500000: 'store_500000', 1000000: 'store_1000000'}
+        self.casino_thresholds = {10000: 'casino_10k', 100000: 'casino_ludoman'}
         self.bal_thresholds = {10000: 'businessman', 50000: 'crypto_hamster', 100000: 'bal_100000', 500000: 'bal_500000', 1000000: 'bal_1000000'}
         self.nick_thresholds = {1: 'nick_1', 5: 'nick_5', 10: 'jester', 15: 'nick_15', 20: 'tilting_player', 50: 'nick_50', 100: 'nick_100'}
         self.streak_thresholds = {3: 'streak_3', 5: 'streak_5', 7: 'no_lifer', 10: 'streak_10', 14: 'streak_14', 21: 'streak_21', 30: 'streak_30', 50: 'streak_50', 69: 'streak_69', 100: 'streak_100', 365: 'streak_365'}
@@ -90,6 +91,16 @@ class Achievements(commands.Cog):
     async def on_streak_updated(self, member, new_streak):
         if new_streak in self.streak_thresholds:
             await self.grant_achievement(member, self.streak_thresholds[new_streak])
+
+    @commands.Cog.listener()
+    async def on_casino_played(self, member, total_spent, total_wins, payout, bet):
+        for threshold, ach_id in self.casino_thresholds.items():
+            if total_spent >= threshold:
+                await self.grant_achievement(member, ach_id)
+                
+        # Проверка на джекпот x50
+        if bet >= 10 and payout >= bet * 50:
+            await self.grant_achievement(member, "casino_jackpot")
 
     @commands.Cog.listener()
     async def on_voice_role_interaction(self, member, channel_members):

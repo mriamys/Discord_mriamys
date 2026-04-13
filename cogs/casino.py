@@ -87,10 +87,20 @@ async def validate(interaction: discord.Interaction, bet_str: str) -> tuple[int 
 
     return bet, user_data
 
-async def apply_result(user_id: str, user_data: dict, bet: int, payout: int):
-    """Списывает ставку, зачисляет выигрыш, обновляет БД."""
+async def apply_result(bot, user_id: str, user_data: dict, bet: int, payout: int, member: discord.Member):
+    """Списывает ставку, зачисляет выигрыш, обновляет БД и статистику."""
+    new_spent = user_data.get("casino_spent", 0) + bet
+    new_wins = user_data.get("casino_wins", 0) + payout
     balance = user_data.get("vibecoins", 0) - bet + payout
-    await db.update_user(user_id, vibecoins=max(balance, 0))
+    
+    await db.update_user(user_id, 
+                         vibecoins=max(balance, 0),
+                         casino_spent=new_spent,
+                         casino_wins=new_wins)
+                         
+    # Вызываем событие для ачивок
+    bot.dispatch("casino_played", member, new_spent, new_wins, payout, bet)
+    
     return max(balance, 0)
 
 def result_color(payout: int, bet: int) -> int:
@@ -114,7 +124,7 @@ class SlotsModal(Modal, title="🎰 Слоты — Ставка"):
 
         reels         = spin_slots()
         payout, line, footer = calc_slots(bet, reels)
-        balance       = await apply_result(str(interaction.user.id), user_data, bet, payout)
+        balance       = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
 
         embed = discord.Embed(title="🎰 Слоты", color=result_color(payout, bet))
         embed.add_field(name="\u200b", value=f"{line}", inline=False)
@@ -150,7 +160,7 @@ class CoinModal(Modal):
             return
 
         payout, msg = flip_coin(bet, self.choice)
-        balance     = await apply_result(str(interaction.user.id), user_data, bet, payout)
+        balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
 
         embed = discord.Embed(title="🪙 Монетка", description=msg, color=result_color(payout, bet))
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
@@ -184,7 +194,7 @@ class DiceModal(Modal):
             return
 
         payout, msg = roll_dice(bet, self.guess)
-        balance     = await apply_result(str(interaction.user.id), user_data, bet, payout)
+        balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
 
         embed = discord.Embed(title="🎲 Кости", description=msg, color=result_color(payout, bet))
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
