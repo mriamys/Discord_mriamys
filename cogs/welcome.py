@@ -49,8 +49,8 @@ class Welcome(commands.Cog):
         try:
             image_bytes = await generate_welcome_card(member)
             if image_bytes:
-                fp = io.BytesIO(image_bytes)
-                file = discord.File(fp, filename="welcome.png")
+                # image_bytes уже является объектом BytesIO (поведение easy-pil)
+                file = discord.File(image_bytes, filename="welcome.png")
 
                 embed = discord.Embed(
                     title="👋 Новый участник!",
@@ -78,8 +78,8 @@ class Welcome(commands.Cog):
         try:
             image_bytes = await generate_welcome_card(interaction.user)
             if image_bytes:
-                fp = io.BytesIO(image_bytes)
-                file = discord.File(fp, filename="welcome.png")
+                # image_bytes уже является объектом BytesIO
+                file = discord.File(image_bytes, filename="welcome.png")
                 embed = discord.Embed(
                     title="👋 Новый участник!",
                     description=(
