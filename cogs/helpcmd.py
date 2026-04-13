@@ -42,14 +42,11 @@ class CustomHelp(commands.Cog):
         )
 
         embed.add_field(
-            name="🔒 Админские команды",
-            value="`!menu` — Заспавнить интерактивное меню ролей\n"
-                  "`!setup_shop` — Заспавнить интерактивный магазин\n"
-                  "`!setup_dynamic_voice` — Настроить категорию для Авто-Приваток\n"
-                  "`!add_coins <user> <amount>` — Выдать VibeКоины",
+            name="🎲 Развлечения",
+            value="`/казик` — Вывод своего личного стола (если он у тебя есть, вообще он в магазине берется)\n"
+                  "`/shop` — Магазин VibeКоинов и услуг",
             inline=False
-        )
-        
+        )        
         embed.set_footer(text="Mriamys Bot | Создано при поддержке Antigravity")
         await ctx.send(embed=embed)
 

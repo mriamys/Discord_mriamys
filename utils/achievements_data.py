@@ -594,5 +594,33 @@ ACHIEVEMENTS = \
         "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f3af.png",
         "emoji": "🎯",
         "rarity": "legendary"
+    },
+    "case_opener": {
+        "name": "Охотник за дропом",
+        "desc": "Открыть 10 Vibe-кейсов.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f4e6.png",
+        "emoji": "📦",
+        "rarity": "rare"
+    },
+    "duel_master": {
+        "name": "Дуэлянт",
+        "desc": "Выиграть 10 дуэлей.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/2694.png",
+        "emoji": "⚔️",
+        "rarity": "epic"
+    },
+    "meme_lord": {
+        "name": "Лорд Высеров",
+        "desc": "Заказать 5 голосовых мемов в войс.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f50a.png",
+        "emoji": "🔊",
+        "rarity": "rare"
+    },
+    "xp_booster": {
+        "name": "Энергетик",
+        "desc": "Купить буст опыта x2.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/26a1.png",
+        "emoji": "⚡",
+        "rarity": "common"
     }
 }

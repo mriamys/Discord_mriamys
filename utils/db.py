@@ -41,7 +41,11 @@ class Database:
                         shop_spent INT DEFAULT 0,
                         nick_changes INT DEFAULT 0,
                         casino_spent INT DEFAULT 0,
-                        casino_wins INT DEFAULT 0
+                        casino_wins INT DEFAULT 0,
+                        xp_boost_until DATETIME DEFAULT NULL,
+                        cases_opened INT DEFAULT 0,
+                        duels_won INT DEFAULT 0,
+                        memes_ordered INT DEFAULT 0
                     )
                 ''')
                 
@@ -51,7 +55,11 @@ class Database:
                     ("shop_spent", "INT DEFAULT 0"),
                     ("nick_changes", "INT DEFAULT 0"),
                     ("casino_spent", "INT DEFAULT 0"),
-                    ("casino_wins", "INT DEFAULT 0")
+                    ("casino_wins", "INT DEFAULT 0"),
+                    ("xp_boost_until", "DATETIME DEFAULT NULL"),
+                    ("cases_opened", "INT DEFAULT 0"),
+                    ("duels_won", "INT DEFAULT 0"),
+                    ("memes_ordered", "INT DEFAULT 0")
                 ]
                 
                 for col_name, col_type in columns_to_add:
@@ -89,7 +97,7 @@ class Database:
                 user = await cur.fetchone()
                 if not user:
                     await cur.execute("INSERT INTO users (user_id) VALUES (%s)", (str(user_id),))
-                    return {"user_id": str(user_id), "vibecoins": 0, "xp": 0, "level": 0, "streak": 0, "last_daily": None, "voice_time_seconds": 0, "msg_count": 0, "shop_spent": 0, "nick_changes": 0, "casino_spent": 0, "casino_wins": 0}
+                    return {"user_id": str(user_id), "vibecoins": 0, "xp": 0, "level": 0, "streak": 0, "last_daily": None, "voice_time_seconds": 0, "msg_count": 0, "shop_spent": 0, "nick_changes": 0, "casino_spent": 0, "casino_wins": 0, "xp_boost_until": None, "cases_opened": 0, "duels_won": 0, "memes_ordered": 0}
                 return user
                 
     async def get_achievements(self, user_id: str):

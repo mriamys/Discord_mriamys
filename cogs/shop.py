@@ -5,14 +5,21 @@ from utils.db import db
 from config import COLOR_MAIN
 import asyncio
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from cogs.casino import CasinoView
 
 SHOP_ITEMS = {
     "nickname":    {"name": "🏷️ Погоняло",       "price": 1000, "desc": "Сменить ник любому участнику на 1 час."},
     "fake_status": {"name": "🎭 Фейковый статус", "price": 500,  "desc": "Добавляет любую приписку к твоему нику на 1 час."},
-    "shut_up":     {"name": "🤐 Заткнись!",       "price": 5000, "desc": "Выдаёт мут выбранному человеку на 30 секунд. Дорого и больно!"},
+    "xp_boost":    {"name": "⚡ Буст опыта x2", "price": 2500, "desc": "Удваивает весь получаемый опыт в чате и голосе на 2 часа."},
+    "voice_meme":  {"name": "🔊 Рандомный высер", "price": 2000, "desc": "Бот будет заходить к тебе в войс и кидать мемные звуки целый час (до 10 раз)."},
+    "vibe_case":   {"name": "📦 Кейс",          "price": 100,  "desc": "Создает личную румму для открытия кейсов. (Сам кейс стоит 1000)"}, # Символическая цена за вход или бесплатно? Пусть пока будет 0 (бесплатный вход).
+    "duel":        {"name": "⚔️ Дуэль",          "price": 100,  "desc": "Создает румму для вызова на дуэль на монеты."},
 }
+
+# Делаем бесплатный вход в руммы для игр
+SHOP_ITEMS["vibe_case"]["price"] = 0
+SHOP_ITEMS["duel"]["price"] = 0
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────
 
@@ -137,38 +144,7 @@ class FakeStatusModal(Modal, title="🎭 Что добавить к нику?"):
         asyncio.create_task(_revert_nick(interaction.user, old_nick, delay=3600))
 
 
-# ─── 3. Заткнись ─────────────────────────────────────────────────────────────
-
-class ShutUpSelectView(View):
-    def __init__(self, user_data: dict):
-        super().__init__(timeout=60)
-        self.user_data = user_data
-
-    @discord.ui.select(cls=UserSelect, placeholder="Кого заткнуть?", min_values=1, max_values=1)
-    async def user_select(self, interaction: discord.Interaction, select: UserSelect):
-        target = interaction.guild.get_member(select.values[0].id)
-        if not target or target.bot:
-            await interaction.response.send_message("❌ Нельзя заткнуть этого пользователя.", ephemeral=True)
-            return
-        if target.id == interaction.user.id:
-            await interaction.response.send_message("❌ Нельзя заткнуть самого себя!", ephemeral=True)
-            return
-
-        new_balance = await deduct(interaction, "shut_up", self.user_data)
-        try:
-            await target.timeout(timedelta(seconds=30), reason=f"Куплен мут игроком {interaction.user.display_name}")
-        except discord.Forbidden:
-            await refund(interaction.user.id, "shut_up")
-            await interaction.response.send_message(
-                "❌ Нет прав заткнуть этого участника (он выше бота в иерархии).", ephemeral=True
-            )
-            return
-
-        await interaction.response.send_message(
-            f"🤐 **{target.display_name}** заткнут на **30 секунд**! Наслаждайся тишиной.\n"
-            f"Остаток: {new_balance} 🪙", ephemeral=True
-        )
-
+# ─── Удален пункт Заткнись ───────────────────────────────────────────────────
 
 # ─── 4. Главный ShopView ──────────────────────────────────────────────────────
 
@@ -252,10 +228,27 @@ class ShopView(View):
             elif item_id == "fake_status":
                 await interaction.response.send_modal(FakeStatusModal(user_data))
 
-            elif item_id == "shut_up":
-                await interaction.response.send_message(
-                    "🤐 Кого хочешь заткнуть?", view=ShutUpSelectView(user_data), ephemeral=True
-                )
+            elif item_id == "xp_boost":
+                new_balance = await deduct(interaction, "xp_boost", user_data)
+                until = datetime.utcnow() + timedelta(hours=2)
+                await db.update_user(str(interaction.user.id), xp_boost_until=until)
+                interaction.client.dispatch("boost_purchased", interaction.user)
+                await interaction.response.send_message(f"⚡ Буст опыта x2 успешно куплен и активен на следующие 2 часа!\nОстаток: {new_balance} 🪙", ephemeral=True)
+
+            elif item_id == "voice_meme":
+                if not interaction.user.voice:
+                    await interaction.response.send_message("❌ Ты должен быть в голосовом канале, чтобы купить высеры!", ephemeral=True)
+                    return
+                # Списание и регистрация будет обрабатываться диспетчером или когом audio_memes
+                new_balance = await deduct(interaction, "voice_meme", user_data)
+                interaction.client.dispatch("voice_meme_purchased", interaction.user, interaction.user.voice.channel)
+                await interaction.response.send_message(f"🔊 Заказ принят! В течение часа жди аудио-троллинг в канале {interaction.user.voice.channel.mention}.\nОстаток: {new_balance} 🪙", ephemeral=True)
+
+            elif item_id == "vibe_case":
+                interaction.client.dispatch("create_vibe_case_room", interaction)
+
+            elif item_id == "duel":
+                interaction.client.dispatch("create_duel_room", interaction)
 
         return callback
 

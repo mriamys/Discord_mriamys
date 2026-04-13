@@ -90,10 +90,19 @@ class Economy(commands.Cog):
         # Начисляем VibeКоины и опыт за сообщения (рандом для интереса)
         user_data = await db.get_user(user_id)
         
+        # Проверяем буст опыта
+        xp_multiplier = 1
+        xp_boost_until = user_data.get('xp_boost_until')
+        if xp_boost_until:
+            if isinstance(xp_boost_until, str):
+                xp_boost_until = datetime.strptime(str(xp_boost_until).split('.')[0], '%Y-%m-%d %H:%M:%S')
+            if xp_boost_until > datetime.utcnow():
+                xp_multiplier = 2
+        
         # 1-3 монетки за сообщение
         new_coins = user_data.get('vibecoins', 0) + random.randint(1, 3)
-        # 15-25 XP за сообщение
-        new_xp = user_data.get('xp', 0) + random.randint(15, 25)
+        # 15-25 XP за сообщение (с учетом буста)
+        new_xp = user_data.get('xp', 0) + (random.randint(15, 25) * xp_multiplier)
         # Статы для ачивок
         new_msg_count = user_data.get('msg_count', 0) + 1
         
@@ -201,8 +210,17 @@ class Economy(commands.Cog):
                 
                 self.bot.dispatch("streak_updated", u, streak)
         
-        new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 2) + streak_bonus
-        new_xp = user_data.get('xp', 0) + (delta_minutes * 10)
+        # Проверяем буст опыта
+        xp_multiplier = 1
+        xp_boost_until = user_data.get('xp_boost_until')
+        if xp_boost_until:
+            if isinstance(xp_boost_until, str):
+                xp_boost_until = datetime.strptime(str(xp_boost_until).split('.')[0], '%Y-%m-%d %H:%M:%S')
+            if xp_boost_until > datetime.utcnow():
+                xp_multiplier = 2
+                
+        new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 4) + streak_bonus
+        new_xp = user_data.get('xp', 0) + (delta_minutes * 10 * xp_multiplier)
         
         await db.update_user(user_id, 
                              vibecoins=new_coins, 
@@ -215,6 +233,25 @@ class Economy(commands.Cog):
             if delta_minutes > 0:
                 self.bot.dispatch("xp_updated", u, new_xp)
             self.bot.dispatch("voice_time_updated", u, total_voice_time)
+
+    @discord.app_commands.command(name="give-money", description="[Admin] Выдать VibeКоины пользователю")
+    @discord.app_commands.default_permissions(administrator=True)
+    async def give_money(self, interaction: discord.Interaction, member: discord.Member, amount: int):
+        if interaction.user.id != interaction.guild.owner_id:
+            await interaction.response.send_message("❌ Эта команда доступна только владельцу сервера.", ephemeral=True)
+            return
+            
+        if amount <= 0:
+            await interaction.response.send_message("❌ Сумма должна быть больше 0.", ephemeral=True)
+            return
+            
+        user_id = str(member.id)
+        user_data = await db.get_user(user_id)
+        new_coins = user_data.get('vibecoins', 0) + amount
+        await db.update_user(user_id, vibecoins=new_coins)
+        
+        await interaction.response.send_message(f"✅ Выдано **{amount} 🪙** пользователю {member.mention}. Теперь у него: **{new_coins} 🪙**")
+
 
 
 async def setup(bot):

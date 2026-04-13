@@ -140,5 +140,24 @@ class Achievements(commands.Cog):
                     if kw in role_name_lo:
                         await self.grant_achievement(member, ach_id)
 
+    @commands.Cog.listener()
+    async def on_case_opened(self, member, total_cases):
+        if total_cases >= 10:
+            await self.grant_achievement(member, "case_opener")
+
+    @commands.Cog.listener()
+    async def on_duel_won(self, member, total_duels_won):
+        if total_duels_won >= 10:
+            await self.grant_achievement(member, "duel_master")
+
+    @commands.Cog.listener()
+    async def on_meme_ordered(self, member, total_memes):
+        if total_memes >= 5:
+            await self.grant_achievement(member, "meme_lord")
+
+    @commands.Cog.listener()
+    async def on_boost_purchased(self, member):
+        await self.grant_achievement(member, "xp_booster")
+
 async def setup(bot):
     await bot.add_cog(Achievements(bot))

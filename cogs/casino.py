@@ -145,34 +145,48 @@ class SlotsModal(discord.ui.Modal):
             if bet is None:
                 return
 
-            reels         = spin_slots()
-            payout, line, footer = calc_slots(bet, reels)
-            balance       = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
-
-            embed = discord.Embed(title="🎰 Слоты", color=result_color(payout, bet))
-            embed.add_field(name="\u200b", value=f"{line}", inline=False)
-            embed.add_field(name="Результат", value=footer, inline=False)
-            embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
+            embed = discord.Embed(title="🎰 Слоты", description="[ 🎰 ] КРУТИМ БАРАБАНЫ [ 🎰 ]", color=discord.Color.blue())
             
             if interaction.message and interaction.channel.name.startswith("казино-"):
-                # Сначала отвечаем, потом удаляем старое сообщение, чтобы не было ошибки
                 await interaction.response.send_message(embed=embed)
                 try: await interaction.message.delete()
                 except: pass
                 
+                msg = await interaction.original_response()
                 menu_embed = get_casino_embed(interaction.user.display_name)
                 await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
             else:
-                # В публичных каналах возвращаем обычные (не скрытые) сообщения
                 await interaction.response.send_message(embed=embed)
+                msg = await interaction.original_response()
+
+            # Анимация
+            for _ in range(4):
+                await asyncio.sleep(0.8)
+                t_reels = spin_slots()
+                embed.description = f"**[  {t_reels[0]}  |  {t_reels[1]}  |  {t_reels[2]}  ]**"
+                try: await msg.edit(embed=embed)
+                except: pass
+
+            await asyncio.sleep(0.5)
+            # Реальный результат
+            reels         = spin_slots()
+            payout, line, footer = calc_slots(bet, reels)
+            balance       = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
+
+            embed.color = result_color(payout, bet)
+            embed.description = f"{line}\n\n{footer}"
+            embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
+            try: await msg.edit(embed=embed)
+            except: pass
+
         except Exception as e:
             print(f"[CASINO ERROR] SlotsModal: {e}")
-            import traceback
-            traceback.print_exc()
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ Произошла ошибка: {e}", ephemeral=True)
-            else:
-                await interaction.followup.send(f"❌ Произошла ошибка: {e}", ephemeral=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ Произошла ошибка: {e}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ Произошла ошибка: {e}", ephemeral=True)
+            except: pass
 
 
 class CoinModal(Modal):
@@ -192,29 +206,46 @@ class CoinModal(Modal):
             if bet is None:
                 return
 
-            payout, msg = flip_coin(bet, self.choice)
-            balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
-
-            embed = discord.Embed(title="🪙 Монетка", description=msg, color=result_color(payout, bet))
-            embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
+            embed = discord.Embed(title="🪙 Монетка", description="⏳ Монетка летит...", color=discord.Color.blue())
             
             if interaction.message and interaction.channel.name.startswith("казино-"):
                 await interaction.response.send_message(embed=embed)
                 try: await interaction.message.delete()
                 except: pass
-                
+                msg = await interaction.original_response()
                 menu_embed = get_casino_embed(interaction.user.display_name)
                 await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
             else:
                 await interaction.response.send_message(embed=embed)
+                msg = await interaction.original_response()
+
+            icons = ["🦅", "💿"]
+            for _ in range(4):
+                await asyncio.sleep(0.6)
+                embed.description = f"**[ {random.choice(icons)} ]**"
+                try: await msg.edit(embed=embed)
+                except: pass
+
+            await asyncio.sleep(0.5)
+
+            payout, msg_text = flip_coin(bet, self.choice)
+            balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
+
+            embed.color = result_color(payout, bet)
+            embed.description = msg_text
+            embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
+            
+            try: await msg.edit(embed=embed)
+            except: pass
+
         except Exception as e:
             print(f"[CASINO ERROR] CoinModal: {e}")
-            import traceback
-            traceback.print_exc()
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-            else:
-                await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
+            except: pass
 
 
 class DiceModal(Modal):
@@ -234,29 +265,46 @@ class DiceModal(Modal):
             if bet is None:
                 return
 
-            payout, msg = roll_dice(bet, self.guess)
-            balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
-
-            embed = discord.Embed(title="🎲 Кости", description=msg, color=result_color(payout, bet))
-            embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
+            embed = discord.Embed(title=f"🎲 Кости (ставка на {self.guess})", description="⏳ Кости трясутся...", color=discord.Color.blue())
 
             if interaction.message and interaction.channel.name.startswith("казино-"):
                 await interaction.response.send_message(embed=embed)
                 try: await interaction.message.delete()
                 except: pass
-                
+                msg = await interaction.original_response()
                 menu_embed = get_casino_embed(interaction.user.display_name)
                 await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
             else:
                 await interaction.response.send_message(embed=embed)
+                msg = await interaction.original_response()
+
+            dice_emojis = ["⚀","⚁","⚂","⚃","⚄","⚅"]
+            for _ in range(4):
+                await asyncio.sleep(0.6)
+                embed.description = f"**[ {random.choice(dice_emojis)} ]**"
+                try: await msg.edit(embed=embed)
+                except: pass
+            
+            await asyncio.sleep(0.5)
+
+            payout, msg_text = roll_dice(bet, self.guess)
+            balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
+
+            embed.color = result_color(payout, bet)
+            embed.description = msg_text
+            embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
+
+            try: await msg.edit(embed=embed)
+            except: pass
+
         except Exception as e:
             print(f"[CASINO ERROR] DiceModal: {e}")
-            import traceback
-            traceback.print_exc()
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
-            else:
-                await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
+            except: pass
 
 
 # ─── Главное меню казино ─────────────────────────────────────────────────────
