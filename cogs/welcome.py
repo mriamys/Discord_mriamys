@@ -97,3 +97,5 @@ class Welcome(commands.Cog):
             await interaction.followup.send(f"❌ Ошибка: `{e}`", ephemeral=True)
             logging.error(f"Test welcome error: {e}")
 
+async def setup(bot):
+    await bot.add_cog(Welcome(bot))
