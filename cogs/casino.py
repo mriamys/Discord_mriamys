@@ -110,9 +110,10 @@ def result_color(payout: int, bet: int) -> int:
 
 # ─── Модалки ─────────────────────────────────────────────────────────────────
 
+class SlotsModal(discord.ui.Modal):
     def __init__(self, balance: int):
         super().__init__(title="🎰 Слоты — Ставка")
-        self.bet_input = TextInput(
+        self.bet_input = discord.ui.TextInput(
             label=f"Твой баланс: {balance:,} 🪙",
             placeholder=f"Введи сумму ({MIN_BET}–{MAX_BET:,})...",
             max_length=10
