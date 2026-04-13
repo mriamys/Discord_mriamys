@@ -154,6 +154,13 @@ ACHIEVEMENTS = \
         "emoji": "👀",
         "rarity": "epic"
     },
+    "voice_67h": {
+        "name": "Six Seven (67)",
+        "desc": "Суммарно 67 часов в голосовых каналах. Респект местным.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f535.png",
+        "emoji": "🔵",
+        "rarity": "epic"
+    },
     "voice_100h": {
         "name": "Дискордный Батя",
         "desc": "100 часов в войсе.",
@@ -341,6 +348,13 @@ ACHIEVEMENTS = \
         "desc": "Достичь 60 уровня.",
         "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f474.png",
         "emoji": "👴",
+        "rarity": "epic"
+    },
+    "level_67": {
+        "name": "Six Seven (67) Level",
+        "desc": "Достичь 67 уровня. Местный авторитет.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f534.png",
+        "emoji": "🔴",
         "rarity": "epic"
     },
     "level_69": {

@@ -9,12 +9,12 @@ class Achievements(commands.Cog):
         self.bot = bot
         
         self.msg_thresholds = {1: 'first_msg', 10: 'msg_10', 50: 'msg_50', 100: 'msg_100', 250: 'msg_250', 500: 'msg_500', 1000: 'msg_1000', 2500: 'msg_2500', 5000: 'msg_5000', 10000: 'keyboard_rambo', 20000: 'msg_20000', 50000: 'msg_50000', 100000: 'msg_100000', 250000: 'msg_250000', 500000: 'msg_500000', 1000000: 'msg_1000000'}
-        self.voice_thresholds = {600: 'voice_10m', 3600: 'voice_1h', 18000: 'chair_glued', 36000: 'voice_10h', 86400: 'voice_24h', 180000: 'voice_50h', 360000: 'voice_100h', 900000: 'voice_250h', 1800000: 'voice_500h', 3600000: 'voice_1000h', 18000000: 'voice_5000h'}
+        self.voice_thresholds = {600: 'voice_10m', 3600: 'voice_1h', 18000: 'chair_glued', 36000: 'voice_10h', 86400: 'voice_24h', 180000: 'voice_50h', 241200: 'voice_67h', 360000: 'voice_100h', 900000: 'voice_250h', 1800000: 'voice_500h', 3600000: 'voice_1000h', 18000000: 'voice_5000h'}
         self.shop_thresholds = {100: 'store_100', 500: 'store_500', 1000: 'store_1000', 5000: 'ludoman', 20000: 'store_20000', 50000: 'store_50000', 100000: 'store_100000', 500000: 'store_500000', 1000000: 'store_1000000'}
         self.bal_thresholds = {10000: 'businessman', 50000: 'crypto_hamster', 100000: 'bal_100000', 500000: 'bal_500000', 1000000: 'bal_1000000'}
         self.nick_thresholds = {1: 'nick_1', 5: 'nick_5', 10: 'jester', 15: 'nick_15', 20: 'tilting_player', 50: 'nick_50', 100: 'nick_100'}
         self.streak_thresholds = {3: 'streak_3', 5: 'streak_5', 7: 'no_lifer', 10: 'streak_10', 14: 'streak_14', 21: 'streak_21', 30: 'streak_30', 50: 'streak_50', 69: 'streak_69', 100: 'streak_100', 365: 'streak_365'}
-        self.level_thresholds = {1890: 'level_1', 47258: 'level_5', 189035: 'level_10', 756143: 'level_20', 1701323: 'level_30', 3024574: 'level_40', 4725897: 'level_50', 6805293: 'level_60', 9000000: 'level_69', 10633270: 'level_75', 12098298: 'level_80', 15311909: 'level_90', 18527410: 'level_99', 18903591: 'absolute'}
+        self.level_thresholds = {1890: 'level_1', 47258: 'level_5', 189035: 'level_10', 756143: 'level_20', 1701323: 'level_30', 3024574: 'level_40', 4725897: 'level_50', 6805293: 'level_60', 8485822: 'level_67', 9000000: 'level_69', 10633270: 'level_75', 12098298: 'level_80', 15311909: 'level_90', 18527410: 'level_99', 18903591: 'absolute'}
 
     async def grant_achievement(self, member: discord.Member, achievement_id: str):
         if achievement_id not in ACHIEVEMENTS:
