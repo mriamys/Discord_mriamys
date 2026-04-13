@@ -12,14 +12,8 @@ SHOP_ITEMS = {
     "nickname":    {"name": "🏷️ Погоняло",       "price": 1000, "desc": "Сменить ник любому участнику на 1 час."},
     "fake_status": {"name": "🎭 Фейковый статус", "price": 500,  "desc": "Добавляет любую приписку к твоему нику на 1 час."},
     "xp_boost":    {"name": "⚡ Буст опыта x2", "price": 2500, "desc": "Удваивает весь получаемый опыт в чате и голосе на 2 часа."},
-    "voice_meme":  {"name": "🔊 Рандомный высер", "price": 2000, "desc": "Бот будет заходить к тебе в войс и кидать мемные звуки целый час (до 10 раз)."},
-    "vibe_case":   {"name": "📦 Кейс",          "price": 100,  "desc": "Создает личную румму для открытия кейсов. (Сам кейс стоит 1000)"}, # Символическая цена за вход или бесплатно? Пусть пока будет 0 (бесплатный вход).
-    "duel":        {"name": "⚔️ Дуэль",          "price": 100,  "desc": "Создает румму для вызова на дуэль на монеты."},
+    "voice_meme":  {"name": "🔊 Рандомный высер", "price": 2000, "desc": "Бот будет заходить к тебе в войс и кидать мемные звуки целый час (до 10 раз)."}
 }
-
-# Делаем бесплатный вход в руммы для игр
-SHOP_ITEMS["vibe_case"]["price"] = 0
-SHOP_ITEMS["duel"]["price"] = 0
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────
 
@@ -165,10 +159,36 @@ class ShopView(View):
             label="🎰 Казино",
             style=discord.ButtonStyle.success,
             custom_id="shop_casino",
-            emoji="🎟️"
+            row=1
         )
         casino_btn.callback = self._casino_callback
         self.add_item(casino_btn)
+        
+        # Кнопка открытия руммы для кейсов
+        case_btn = Button(
+            label="📦 Кейс",
+            style=discord.ButtonStyle.success,
+            custom_id="shop_case",
+            row=1
+        )
+        case_btn.callback = self._case_callback
+        self.add_item(case_btn)
+        
+        # Кнопка руммы дуэлей
+        duel_btn = Button(
+            label="⚔️ Дуэли",
+            style=discord.ButtonStyle.success,
+            custom_id="shop_duel",
+            row=1
+        )
+        duel_btn.callback = self._duel_callback
+        self.add_item(duel_btn)
+
+    async def _case_callback(self, interaction: discord.Interaction):
+        interaction.client.dispatch("create_vibe_case_room", interaction)
+
+    async def _duel_callback(self, interaction: discord.Interaction):
+        interaction.client.dispatch("create_duel_room", interaction)
 
     async def _casino_callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -244,12 +264,6 @@ class ShopView(View):
                 interaction.client.dispatch("voice_meme_purchased", interaction.user, interaction.user.voice.channel)
                 await interaction.response.send_message(f"🔊 Заказ принят! В течение часа жди аудио-троллинг в канале {interaction.user.voice.channel.mention}.\nОстаток: {new_balance} 🪙", ephemeral=True)
 
-            elif item_id == "vibe_case":
-                interaction.client.dispatch("create_vibe_case_room", interaction)
-
-            elif item_id == "duel":
-                interaction.client.dispatch("create_duel_room", interaction)
-
         return callback
 
 
@@ -279,6 +293,8 @@ class Shop(commands.Cog):
         embed.set_image(url="https://media.giphy.com/media/xUPGGw7jzcqeMw5dI8/giphy.gif")
         for item in SHOP_ITEMS.values():
             embed.add_field(name=f"{item['name']} — {item['price']} 🪙", value=item['desc'], inline=False)
+            
+        embed.add_field(name="🎰 Развлечения — Бесплатный вход", value="Жми зелёные кнопки ниже, чтобы открыть личные игровые столы с Казино, Кейсами или Дуэлями!", inline=False)
 
         await ctx.send(embed=embed, view=ShopView())
         await ctx.message.delete()
