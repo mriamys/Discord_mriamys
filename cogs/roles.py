@@ -142,7 +142,11 @@ class DevSelect(discord.ui.Select):
         
         # Удаляем роли
         for dev in DEV_OPTIONS.keys():
-            role_name = "Программист" if dev == "Программист" else f"{dev} Coder"
+            if "кодер" in dev.lower() or dev == "Программист":
+                role_name = dev
+            else:
+                role_name = f"{dev} Coder"
+
             if dev not in selected_devs:
                 role = discord.utils.get(guild.roles, name=role_name)
                 if role and role in member.roles:
@@ -150,14 +154,32 @@ class DevSelect(discord.ui.Select):
 
         # Выдаем и создаем каналы
         for dev in selected_devs:
-            role_name = "Программист" if dev == "Программист" else f"{dev} Coder"
+            if "кодер" in dev.lower() or dev == "Программист":
+                role_name = dev
+                old_role_name = f"{dev} Coder" if dev != "Программист" else None
+            else:
+                role_name = f"{dev} Coder"
+                old_role_name = None
+
             role = discord.utils.get(guild.roles, name=role_name)
+            
+            # --- ЛОГИКА ПЕРЕИМЕНОВАНИЯ ---
+            if not role and old_role_name:
+                role = discord.utils.get(guild.roles, name=old_role_name)
+                if role:
+                    try:
+                        await role.edit(name=role_name)
+                        print(f"Роль переименована: {old_role_name} -> {role_name}")
+                    except discord.Forbidden:
+                        print(f"Нет прав переименовать роль {old_role_name}")
+
             if not role:
                 role = await guild.create_role(name=role_name, mentionable=True, hoist=True, color=discord.Color.from_rgb(46, 204, 113))
+            
             if role not in member.roles:
                 await member.add_roles(role)
                 
-        # Если была выбрана хотя бы одна галочка (любой ЯП или сам "Программист"), даем базовую роль "Программист"
+        # Если была выбрана хотя бы одна галочка, даем базовую роль "Программист"
         if selected_devs:
             if not base_prog_role:
                 base_prog_role = await guild.create_role(name="Программист", mentionable=True, hoist=True, color=discord.Color.from_rgb(46, 204, 113))
@@ -178,26 +200,31 @@ class DevSelect(discord.ui.Select):
                 print(e)
                 
         if category:
-            # Разрешаем всем выбранным ролям видеть эту категорию
             try:
-                # Даем доступ всем кодерам + базовому "Программист"
                 if selected_devs and base_prog_role:
                     await category.set_permissions(base_prog_role, read_messages=True, connect=True)
                 for dev in selected_devs:
-                    role_name = "Программист" if dev == "Программист" else f"{dev} Coder"
+                    if "кодер" in dev.lower() or dev == "Программист":
+                        role_name = dev
+                    else:
+                        role_name = f"{dev} Coder"
                     role = discord.utils.get(guild.roles, name=role_name)
                     if role:
                         await category.set_permissions(role, read_messages=True, connect=True)
             except Exception:
                 pass
-            # Создаем текстовые чаты для каждого выбранного направления
+
+            # Создаем текстовые чаты
             for dev in selected_devs:
                 if dev == "Программист":
-                    continue # Для общей роли мы не создаем отдельный чат
+                    continue 
                     
-                role_name = f"{dev} Coder"
-                role = discord.utils.get(guild.roles, name=role_name)
+                if "кодер" in dev.lower():
+                    role_name = dev
+                else:
+                    role_name = f"{dev} Coder"
                 
+                role = discord.utils.get(guild.roles, name=role_name)
                 clean_name = dev.lower().replace("++", "pp").replace("#", "sharp")
                 chan_name = f"💬┃{clean_name}-chat"
                 existing_channel = discord.utils.get(guild.text_channels, name=chan_name)
@@ -207,7 +234,7 @@ class DevSelect(discord.ui.Select):
                     role: discord.PermissionOverwrite(read_messages=True)
                 }
                 
-                if category and not existing_channel:
+                if not existing_channel:
                     try:
                         await guild.create_text_channel(chan_name, category=category, overwrites=chan_overwrites)
                     except Exception as e:
