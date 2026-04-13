@@ -210,6 +210,14 @@ class TwitchNotifier(commands.Cog):
 
     async def announce_stream(self, login, stream_info):
         self.stream_states[login]["messages"] = []
+
+        # Если это стрим друга — не постим, пока я сам в эфире
+        if login != self.main_channel:
+            main_state = self.stream_states.get(self.main_channel, {})
+            if main_state.get("is_live", False):
+                logging.info(f"Skipping friend stream announcement for {login}: main channel is live.")
+                return
+
         embed = self.build_embed(login, stream_info)
         
         channels_to_send = await self.get_announce_channels()
