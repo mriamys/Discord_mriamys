@@ -31,12 +31,16 @@ def get_case_embed() -> discord.Embed:
     return embed
 
 class CaseView(View):
+    def __init__(self, user_id=None):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+
     async def _handle_case(self, interaction: discord.Interaction, price: int, min_val: int, max_val: int, case_name: str, emoji: str):
         # Если вью персистентная (из setup_hook), берем ID из автора взаимодействия
         uid = self.user_id if self.user_id else str(interaction.user.id)
         
         # Простая проверка: если это личный канал игрока, позволяем играть только ему
-        if interaction.channel.name.startswith("📦┃кейс-"):
+        if "┃кейс-" in interaction.channel.name:
             if str(interaction.user.id) not in interaction.channel.name:
                 await interaction.response.send_message("Это не твой кейс!", ephemeral=True)
                 return
@@ -51,7 +55,7 @@ class CaseView(View):
         # Снимаем деньги
         new_balance = balance - price
         cases_opened = user_data.get('cases_opened', 0) + 1
-        await db.update_user(self.user_id, vibecoins=new_balance, cases_opened=cases_opened)
+        await db.update_user(uid, vibecoins=new_balance, cases_opened=cases_opened)
         
         interaction.client.dispatch("case_opened", interaction.user, cases_opened)
 
@@ -77,14 +81,14 @@ class CaseView(View):
         # Отправляем начальное сообщение с анимацией
         embed = discord.Embed(title=f"{emoji} Открытие {case_name}...", description="[ 🎰 ] КРУТИМ РУЛЕТКУ [ 🎰 ]", color=discord.Color.blue())
         
-        if interaction.message and interaction.channel.name.startswith("📦┃кейс-"):
+        if interaction.message and "┃кейс-" in interaction.channel.name:
             await interaction.response.send_message(embed=embed)
             try: await interaction.message.delete()
             except: pass
             
             msg = await interaction.original_response()
             menu_embed = get_case_embed()
-            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CaseView(self.user_id))
+            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CaseView(uid))
         else:
             await interaction.response.send_message(embed=embed)
             msg = await interaction.original_response()
@@ -111,7 +115,7 @@ class CaseView(View):
             embed.color = discord.Color.red()
             embed.description = f"📉 Минус... Выпало: **{win_amount} 🪙**\nТекущий баланс: **{new_balance + win_amount} 🪙**"
 
-        await db.update_user(self.user_id, vibecoins=new_balance + win_amount)
+        await db.update_user(uid, vibecoins=new_balance + win_amount)
         try:
             await msg.edit(embed=embed)
         except:
@@ -189,6 +193,12 @@ class Cases(commands.Cog):
         guild = interaction.guild
         channel_name = f"📦┃кейс-{interaction.user.name[:10]}"
         existing = discord.utils.get(guild.channels, name=channel_name.lower())
+        if not existing: # Дополнительная проверка на случай если get по имени не сработал из-за эмодзи
+            for ch in guild.text_channels:
+                if f"кейс-{interaction.user.name[:10]}".lower() in ch.name.lower():
+                    existing = ch
+                    break
+        
         if existing:
             await interaction.followup.send(f"У тебя уже открыта комната: {existing.mention}", ephemeral=True)
             return

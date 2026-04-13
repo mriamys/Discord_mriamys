@@ -12,8 +12,9 @@ def get_duel_embed():
         title="⚔️ Дуэльный Клуб",
         description=(
             "Выбери жертву из списка ниже и введи сумму ставки.\n"
-            "Если оппонент примет вызов - вы скидываетесь в общий банк и бот кидает кости.\n"
-            "Победитель забирает всё!"
+            "Если оппонент примет вызов — вы скидываетесь в общий банк и бот кидает кости.\n"
+            "Победитель забирает всё!\n\n"
+            "💡 *Если не видишь друга в списке — просто начни писать его ник в меню выбора.*"
         ),
         color=discord.Color.dark_red()
     )
@@ -110,14 +111,17 @@ class DuelAcceptView(View):
 
 
 class DuelBetModal(Modal):
-    def __init__(self, challenger: discord.Member, target: discord.Member, balance: int):
-        super().__init__(title=f"Ставка (Баланс: {balance:,})")
+    def __init__(self, challenger: discord.Member, target: discord.Member, c_balance: int, t_balance: int):
+        # Показываем баланс обоих игроков в заголовке
+        super().__init__(title=f"Твой: {c_balance:,} | Его: {t_balance:,}")
         self.challenger = challenger
         self.target = target
+        self.c_balance = c_balance
+        self.t_balance = t_balance
         
         self.bet_input = TextInput(
-            label=f"Сумма ставки", 
-            placeholder="Например: 1000", 
+            label=f"Сумма ставки (макс. {min(c_balance, t_balance):,})", 
+            placeholder=f"Напиши число...", 
             max_length=10
         )
         self.add_item(self.bet_input)
@@ -183,8 +187,12 @@ class DuelRoomView(View):
             pass
 
         user_data = await db.get_user(str(interaction.user.id))
+        target_data = await db.get_user(str(target.id))
+        
         balance = user_data.get('vibecoins', 0)
-        await interaction.response.send_modal(DuelBetModal(interaction.user, target, balance))
+        t_balance = target_data.get('vibecoins', 0)
+        
+        await interaction.response.send_modal(DuelBetModal(interaction.user, target, balance, t_balance))
 
     @discord.ui.button(label="Выйти и удалить комнату", style=discord.ButtonStyle.danger, emoji="🚪", row=1, custom_id="duel_room_exit")
     async def btn_close(self, interaction: discord.Interaction, button: Button):
