@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import io
+import os
 import logging
 from config import COLOR_SUCCESS
 from utils.images import generate_welcome_card
@@ -8,37 +9,64 @@ from utils.images import generate_welcome_card
 class Welcome(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.welcome_channel_id = os.getenv("WELCOME_CHANNEL_ID")
+
+    async def get_welcome_channel(self, guild: discord.Guild):
+        # 1. Приоритет — явный ID из .env
+        if self.welcome_channel_id and self.welcome_channel_id.strip().isdigit():
+            ch = guild.get_channel(int(self.welcome_channel_id))
+            if ch:
+                return ch
+
+        # 2. Системный канал Discord
+        if guild.system_channel:
+            return guild.system_channel
+
+        # 3. Поиск по ключевым словам в названии
+        keywords = ['приветик', 'привет', 'welcome', 'встреча']
+        for ch in guild.text_channels:
+            ch_name = ch.name.lower()
+            if any(k in ch_name for k in keywords):
+                if ch.permissions_for(guild.me).send_messages:
+                    return ch
+
+        return None
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
         logging.info(f"New member joined: {member.name}")
-        # Ищем канал для приветствия
-        channel = member.guild.system_channel
+
+        channel = await self.get_welcome_channel(member.guild)
+
         if not channel:
-            # Пытаемся найти канал по названию (привет, welcome, встреча)
-            for ch in member.guild.text_channels:
-                ch_name = ch.name.lower()
-                if 'привет' in ch_name or 'welcome' in ch_name or 'встреча' in ch_name:
-                    channel = ch
-                    break
-                    
-        if channel and channel.permissions_for(member.guild.me).send_messages:
-            try:
-                # Генерируем картинку
-                image_bytes = await generate_welcome_card(member)
-                if image_bytes:
-                    fp = io.BytesIO(image_bytes)
-                    file = discord.File(fp, filename="welcome.png")
-                    
-                    embed = discord.Embed(
-                        title="👋 Новый участник!",
-                        description=f"Добро пожаловать на сервер, {member.mention}! 🎉\nМы рады тебя видеть. Чувствуй себя как дома!\n\n**Обязательно выбери свои роли в канале с выдачей ролей**, чтобы получить доступ к нужным комнатам!",
-                        color=COLOR_SUCCESS
-                    )
-                    embed.set_image(url="attachment://welcome.png")
-                    await channel.send(content=member.mention, embed=embed, file=file)
-            except Exception as e:
-                logging.error(f"Error sending welcome message: {e}")
+            logging.warning(f"Welcome channel not found for guild {member.guild.name}")
+            return
+
+        if not channel.permissions_for(member.guild.me).send_messages:
+            logging.warning(f"No permission to send in welcome channel #{channel.name}")
+            return
+
+        try:
+            image_bytes = await generate_welcome_card(member)
+            if image_bytes:
+                fp = io.BytesIO(image_bytes)
+                file = discord.File(fp, filename="welcome.png")
+
+                embed = discord.Embed(
+                    title="👋 Новый участник!",
+                    description=(
+                        f"Добро пожаловать на сервер, {member.mention}! 🎉\n"
+                        f"Мы рады тебя видеть. Чувствуй себя как дома!\n\n"
+                        f"**Обязательно выбери свои роли в канале с выдачей ролей**, "
+                        f"чтобы получить доступ к нужным комнатам!"
+                    ),
+                    color=COLOR_SUCCESS
+                )
+                embed.set_image(url="attachment://welcome.png")
+                await channel.send(content=member.mention, embed=embed, file=file)
+                logging.info(f"Welcome message sent to #{channel.name} for {member.name}")
+        except Exception as e:
+            logging.error(f"Error sending welcome message: {e}")
 
 async def setup(bot):
     await bot.add_cog(Welcome(bot))
