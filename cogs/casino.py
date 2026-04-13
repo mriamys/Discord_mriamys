@@ -60,6 +60,21 @@ def roll_dice(bet: int, guess: int) -> tuple[int, str]:
     return payout, msg
 
 # ─── Валидация ────────────────────────────────────────────────────────────────
+def get_casino_embed(user_name=None):
+    """Генерирует стандартный красивый embed казино."""
+    title = f"🎰 Личный стол: {user_name}" if user_name else "🎰 VibeКазино"
+    description = (
+        "Присаживайся за стол и умножай свои **VibeКоины**!\n\n"
+        "**🎰 Слоты** — классика. 3 в ряд до **x50**, 2 слева = **x1.5**\n"
+        "**🪙 Монетка** — 50/50. Угадай — получи **x1.9**\n"
+        "**🎲 Кости** — угадай число 1–6 и получи **x5**!\n\n"
+        f"Мин. ставка: **{MIN_BET} 🪙** • Макс: **{MAX_BET:,} 🪙**"
+    )
+    embed = discord.Embed(title=title, description=description, color=0xF1C40F)
+    embed.set_image(url="https://media.giphy.com/media/3ohzdFmHSiRBbhzaE8/giphy.gif")
+    embed.set_footer(text="Все результаты — случайные. Играй ответственно! 🍀")
+    return embed
+
 
 async def validate(interaction: discord.Interaction, bet_str: str) -> tuple[int | None, dict | None]:
     user_id = str(interaction.user.id)
@@ -145,11 +160,7 @@ class SlotsModal(discord.ui.Modal):
                 try: await interaction.message.delete()
                 except: pass
                 
-                menu_embed = discord.Embed(
-                    title=f"🎰 Личный стол: {interaction.user.display_name}",
-                    description="Добро пожаловать! Умножай свои **VibeКоины**.\nЖми кнопки ниже, чтобы играть.",
-                    color=0xF1C40F
-                )
+                menu_embed = get_casino_embed(interaction.user.display_name)
                 await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
             else:
                 # В публичных каналах возвращаем обычные (не скрытые) сообщения
@@ -192,11 +203,7 @@ class CoinModal(Modal):
                 try: await interaction.message.delete()
                 except: pass
                 
-                menu_embed = discord.Embed(
-                    title=f"🎰 Личный стол: {interaction.user.display_name}",
-                    description="Добро пожаловать! Умножай свои **VibeКоины**.\nЖми кнопки ниже, чтобы играть.",
-                    color=0xF1C40F
-                )
+                menu_embed = get_casino_embed(interaction.user.display_name)
                 await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
             else:
                 await interaction.response.send_message(embed=embed)
@@ -238,11 +245,7 @@ class DiceModal(Modal):
                 try: await interaction.message.delete()
                 except: pass
                 
-                menu_embed = discord.Embed(
-                    title=f"🎰 Личный стол: {interaction.user.display_name}",
-                    description="Добро пожаловать! Умножай свои **VibeКоины**.\nЖми кнопки ниже, чтобы играть.",
-                    color=0xF1C40F
-                )
+                menu_embed = get_casino_embed(interaction.user.display_name)
                 await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
             else:
                 await interaction.response.send_message(embed=embed)
@@ -320,19 +323,7 @@ class Casino(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def setup_casino(self, ctx):
         """Создаёт постоянный embed казино с кнопками (только для админов)."""
-        embed = discord.Embed(
-            title="🎰 VibeКазино",
-            description=(
-                "Присаживайся за стол и умножай свои **VibeКоины**!\n\n"
-                "**🎰 Слоты** — классика. 3 в ряд до **x50**, 2 слева = **x1.5**\n"
-                "**🪙 Монетка** — 50/50. Угадай — получи **x1.9**\n"
-                "**🎲 Кости** — угадай число 1–6 и получи **x5**!\n\n"
-                f"Мин. ставка: **{MIN_BET} 🪙** • Макс: **{MAX_BET:,} 🪙**"
-            ),
-            color=0xF1C40F
-        )
-        embed.set_image(url="https://media.giphy.com/media/3ohzdFmHSiRBbhzaE8/giphy.gif")
-        embed.set_footer(text="Все результаты — случайные. Играй ответственно! 🍀")
+        embed = get_casino_embed()
         await ctx.send(embed=embed, view=CasinoView())
         await ctx.message.delete()
 
