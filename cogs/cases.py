@@ -7,6 +7,25 @@ import asyncio
 import random
 import logging
 
+def get_case_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="✨ Vibe Кейсы",
+        description=(
+            "🪵 **Дерево (100 🪙):** выигрыш от 10 до 500\n"
+            "🪨 **Камень (300 🪙):** выигрыш от 50 до 1,200\n"
+            "⚙️ **Железо (500 🪙):** выигрыш от 100 до 2,500\n"
+            "📦 **Бронза (1,000 🪙):** выигрыш от 100 до 5,000\n"
+            "💿 **Серебро (5,000 🪙):** выигрыш от 1,000 до 15,000\n"
+            "🔮 **Нефрит (8,000 🪙):** выигрыш от 2,000 до 30,000\n"
+            "🏵️ **Золото (10,000 🪙):** выигрыш от 3,000 до 40,000\n"
+            "💎 **Бриллиант (50,000 🪙):** выигрыш от 10,000 до 250,000\n\n"
+            "Жми кнопку ниже, чтобы попытать удачу. Когда надоест - жми Выйти."
+        ),
+        color=COLOR_MAIN
+    )
+    embed.set_image(url="https://media1.tenor.com/m/Znt_b7v133IAAAAd/mystery-box.gif")
+    return embed
+
 class CaseView(View):
     def __init__(self, user_id: str):
         super().__init__(timeout=None)
@@ -31,11 +50,39 @@ class CaseView(View):
         
         interaction.client.dispatch("case_opened", interaction.user, cases_opened)
 
-        win_amount = random.randint(min_val, max_val)
+        chance = random.randint(1, 100)
+        
+        if chance <= 55:  # 55% - Проигрыш (минус)
+            win_amount = random.randint(min_val, max(min_val, price - 1))
+        elif chance <= 85: # 30% - Окуп / Небольшой плюс
+            upper = min(int(price * 1.5), max_val)
+            win_amount = random.randint(price, max(price, upper))
+        elif chance <= 95: # 10% - Нормальный плюс
+            lower = min(int(price * 1.5) + 1, max_val)
+            upper = min(int(price * 2.5), max_val)
+            win_amount = random.randint(lower, max(lower, upper))
+        elif chance <= 99: # 4% - Мега Выигрыш
+            lower = min(int(price * 2.5) + 1, max_val)
+            upper = min(int(price * 4.0), max_val)
+            win_amount = random.randint(lower, max(lower, upper))
+        else:              # 1% - ДЖЕКПОТ (макс выигрыш)
+            lower = min(int(price * 4.0) + 1, max_val)
+            win_amount = random.randint(lower, max(lower, max_val))
 
         # Отправляем начальное сообщение с анимацией
         embed = discord.Embed(title=f"{emoji} Открытие {case_name}...", description="[ 🎰 ] КРУТИМ РУЛЕТКУ [ 🎰 ]", color=discord.Color.blue())
-        await interaction.response.send_message(embed=embed)
+        
+        if interaction.message and interaction.channel.name.startswith("📦┃кейс-"):
+            await interaction.response.send_message(embed=embed)
+            try: await interaction.message.delete()
+            except: pass
+            
+            msg = await interaction.original_response()
+            menu_embed = get_case_embed()
+            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CaseView(self.user_id))
+        else:
+            await interaction.response.send_message(embed=embed)
+            msg = await interaction.original_response()
         
         # Анимация "цифрового потока"
         steps = [random.randint(min_val, max_val) for _ in range(3)]
@@ -44,7 +91,7 @@ class CaseView(View):
             await asyncio.sleep(0.4)
             embed.description = f"**[  {step_val:04d} 🪙  ]**"
             try:
-                await interaction.edit_original_response(embed=embed)
+                await msg.edit(embed=embed)
             except discord.HTTPException:
                 pass
 
@@ -60,7 +107,10 @@ class CaseView(View):
             embed.description = f"📉 Минус... Выпало: **{win_amount} 🪙**\nТекущий баланс: **{new_balance + win_amount} 🪙**"
 
         await db.update_user(self.user_id, vibecoins=new_balance + win_amount)
-        await interaction.edit_original_response(embed=embed)
+        try:
+            await msg.edit(embed=embed)
+        except:
+            pass
 
     @discord.ui.button(label="Дерево (100 🪙)", style=discord.ButtonStyle.secondary, emoji="🪵", row=0)
     async def btn_wooden(self, interaction: discord.Interaction, button: Button):
@@ -140,22 +190,7 @@ class Cases(commands.Cog):
 
         await interaction.followup.send(f"✅ Комната создана: {channel.mention}", ephemeral=True)
         
-        embed = discord.Embed(
-            title="✨ Vibe Кейсы",
-            description=(
-                "🪵 **Дерево (100 🪙):** выигрыш от 10 до 500\n"
-                "🪨 **Камень (300 🪙):** выигрыш от 50 до 1,200\n"
-                "⚙️ **Железо (500 🪙):** выигрыш от 100 до 2,500\n"
-                "📦 **Бронза (1,000 🪙):** выигрыш от 100 до 5,000\n"
-                "💿 **Серебро (5,000 🪙):** выигрыш от 1,000 до 15,000\n"
-                "🔮 **Нефрит (8,000 🪙):** выигрыш от 2,000 до 30,000\n"
-                "🏵️ **Золото (10,000 🪙):** выигрыш от 3,000 до 40,000\n"
-                "💎 **Бриллиант (50,000 🪙):** выигрыш от 10,000 до 250,000\n\n"
-                "Жми кнопку ниже, чтобы попытать удачу. Когда надоест - жми Выйти."
-            ),
-            color=COLOR_MAIN
-        )
-        embed.set_image(url="https://media1.tenor.com/m/Znt_b7v133IAAAAd/mystery-box.gif")
+        embed = get_case_embed()
         
         await channel.send(content=interaction.user.mention, embed=embed, view=CaseView(str(interaction.user.id)))
 
