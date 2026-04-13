@@ -68,7 +68,7 @@ class MriamysBot(commands.Bot):
         if isinstance(error, commands.MissingPermissions):
             embed.description = "У вас нет подходящих прав (роли) для выполнения этой команды!"
         elif isinstance(error, commands.MissingRequiredArgument):
-            embed.description = f"Вы пропустили обязательный аргумент: `{error.param.name}`\nНапишите `m!help` для подробностей."
+            embed.description = f"Вы пропустили обязательный аргумент: `{error.param.name}`\nНапишите `!help` для подробностей."
         elif isinstance(error, commands.CommandOnCooldown):
             embed.description = f"Команда перегрелась! Подождите {error.retry_after:.1f} сек."
         else:

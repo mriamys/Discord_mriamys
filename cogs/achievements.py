@@ -26,7 +26,7 @@ class Achievements(commands.Cog):
             rank_channel = discord.utils.get(member.guild.text_channels, name="📜┃ранг")
             embed = discord.Embed(
                 title=f"🏆 ПОЛУЧЕНО ДОСТИЖЕНИЕ: {ach_data['name']}!",
-                description=f"**{ach_data['desc']}**\n\nМожешь проверить свою коллекцию в `!profile`!",
+                description=f"**{ach_data['desc']}**\n\nМожешь проверить свою коллекцию в `profile`!",
                 color=discord.Color.gold()
             )
             embed.set_thumbnail(url=ach_data['icon_url'])

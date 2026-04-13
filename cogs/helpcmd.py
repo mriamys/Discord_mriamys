@@ -10,7 +10,7 @@ class CustomHelp(commands.Cog):
     async def help_command(self, ctx):
         embed = discord.Embed(
             title="🌌 Путеводитель по Mriamys",
-            description="Добро пожаловать! Ниже представлен функционал бота. Большинство команд поддерживают как слэш `/команда`, так и префикс `m!команда`.",
+            description="Добро пожаловать! Ниже представлен функционал бота. Большинство команд поддерживают как слэш `/команда`, так и префикс `!команда`.",
             color=COLOR_MAIN
         )
         embed.set_thumbnail(url=self.bot.user.display_avatar.url if self.bot.user.avatar else None)
@@ -43,10 +43,10 @@ class CustomHelp(commands.Cog):
 
         embed.add_field(
             name="🔒 Админские команды",
-            value="`m!menu` — Заспавнить интерактивное меню ролей\n"
-                  "`m!setup_shop` — Заспавнить интерактивный магазин\n"
-                  "`m!setup_dynamic_voice` — Настроить категорию для Авто-Приваток\n"
-                  "`m!add_coins <user> <amount>` — Выдать VibeКоины",
+            value="`!menu` — Заспавнить интерактивное меню ролей\n"
+                  "`!setup_shop` — Заспавнить интерактивный магазин\n"
+                  "`!setup_dynamic_voice` — Настроить категорию для Авто-Приваток\n"
+                  "`!add_coins <user> <amount>` — Выдать VibeКоины",
             inline=False
         )
         
