@@ -56,20 +56,20 @@ class CaseView(View):
 
         chance = random.randint(1, 100)
         
-        if chance <= 55:  # 55% - Проигрыш (минус)
+        if chance <= 50:  # 50% - Проигрыш (минус)
             win_amount = random.randint(min_val, max(min_val, price - 1))
-        elif chance <= 85: # 30% - Окуп / Небольшой плюс
+        elif chance <= 75: # 25% - Окуп / Небольшой плюс
             upper = min(int(price * 1.5), max_val)
             win_amount = random.randint(price, max(price, upper))
-        elif chance <= 95: # 10% - Нормальный плюс
+        elif chance <= 90: # 15% - Нормальный плюс
             lower = min(int(price * 1.5) + 1, max_val)
             upper = min(int(price * 2.5), max_val)
             win_amount = random.randint(lower, max(lower, upper))
-        elif chance <= 99: # 4% - Мега Выигрыш
+        elif chance <= 98: # 8% - Мега Выигрыш
             lower = min(int(price * 2.5) + 1, max_val)
             upper = min(int(price * 4.0), max_val)
             win_amount = random.randint(lower, max(lower, upper))
-        else:              # 1% - ДЖЕКПОТ (макс выигрыш)
+        else: # 2% - Джекпот
             lower = min(int(price * 4.0) + 1, max_val)
             win_amount = random.randint(lower, max(lower, max_val))
 
