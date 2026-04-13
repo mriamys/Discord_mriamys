@@ -166,7 +166,19 @@ class DuelRoomView(View):
 
     @discord.ui.select(cls=UserSelect, placeholder="Кого вызываешь на дуэль?", min_values=1, max_values=1, custom_id="duel_user_select")
     async def select_target(self, interaction: discord.Interaction, select: UserSelect):
-        aid = self.author_id if self.author_id else interaction.user.id
+        aid = None
+        if self.author_id:
+            aid = int(self.author_id)
+        else:
+            # Пытаемся достать из названия канала
+            if "┃дуэль-" in interaction.channel.name:
+                parts = interaction.channel.name.split("-")
+                if len(parts) >= 2:
+                    try: aid = int(parts[-1])
+                    except: pass
+        
+        if not aid: aid = interaction.user.id # fallback
+
         if interaction.user.id != aid:
             await interaction.response.send_message("❌ Только инициатор комнаты может выбирать соперника.", ephemeral=True)
             return
@@ -196,7 +208,18 @@ class DuelRoomView(View):
 
     @discord.ui.button(label="Выйти и удалить комнату", style=discord.ButtonStyle.danger, emoji="🚪", row=1, custom_id="duel_room_exit")
     async def btn_close(self, interaction: discord.Interaction, button: Button):
-        aid = self.author_id if self.author_id else interaction.user.id
+        aid = None
+        if self.author_id:
+            aid = int(self.author_id)
+        else:
+            if "┃дуэль-" in interaction.channel.name:
+                parts = interaction.channel.name.split("-")
+                if len(parts) >= 2:
+                    try: aid = int(parts[-1])
+                    except: pass
+        
+        if not aid: aid = interaction.user.id
+
         if interaction.user.id != aid and not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Только владелец комнаты или админ может её закрыть.", ephemeral=True)
             return
@@ -216,8 +239,15 @@ class Duels(commands.Cog):
     async def on_create_duel_room(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
-        channel_name = f"⚔️┃дуэль-{interaction.user.name[:10]}"
-        existing = discord.utils.get(guild.channels, name=channel_name.lower())
+        guild = interaction.guild
+        channel_name = f"⚔️┃дуэль-{interaction.user.name[:10]}-{interaction.user.id}"
+        
+        existing = None
+        for ch in guild.text_channels:
+            if "┃дуэль-" in ch.name and str(interaction.user.id) in ch.name:
+                existing = ch
+                break
+        
         if existing:
             await interaction.followup.send(f"У тебя уже открыта комната: {existing.mention}", ephemeral=True)
             return

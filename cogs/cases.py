@@ -44,6 +44,9 @@ class CaseView(View):
             if str(interaction.user.id) not in interaction.channel.name:
                 await interaction.response.send_message("Это не твой кейс!", ephemeral=True)
                 return
+        elif self.user_id and str(interaction.user.id) != self.user_id:
+            await interaction.response.send_message("Это не твой кейс!", ephemeral=True)
+            return
         
         user_data = await db.get_user(uid)
         balance = user_data.get('vibecoins', 0)
@@ -191,13 +194,15 @@ class Cases(commands.Cog):
     async def on_create_vibe_case_room(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
-        channel_name = f"📦┃кейс-{interaction.user.name[:10]}"
-        existing = discord.utils.get(guild.channels, name=channel_name.lower())
-        if not existing: # Дополнительная проверка на случай если get по имени не сработал из-за эмодзи
-            for ch in guild.text_channels:
-                if f"кейс-{interaction.user.name[:10]}".lower() in ch.name.lower():
-                    existing = ch
-                    break
+        # В название канала добавляем ID для точной проверки
+        channel_name = f"📦┃кейс-{interaction.user.name[:10]}-{interaction.user.id}"
+        
+        # Ищем канал по ID в названии
+        existing = None
+        for ch in guild.text_channels:
+            if "┃кейс-" in ch.name and str(interaction.user.id) in ch.name:
+                existing = ch
+                break
         
         if existing:
             await interaction.followup.send(f"У тебя уже открыта комната: {existing.mention}", ephemeral=True)
