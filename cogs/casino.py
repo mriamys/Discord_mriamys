@@ -147,7 +147,7 @@ class SlotsModal(discord.ui.Modal):
 
             embed = discord.Embed(title="🎰 Слоты", description="[ 🎰 ] КРУТИМ БАРАБАНЫ [ 🎰 ]", color=discord.Color.blue())
             
-            if interaction.message and interaction.channel.name.startswith("казино-"):
+            if interaction.message and "казино-" in interaction.channel.name:
                 await interaction.response.send_message(embed=embed)
                 try: await interaction.message.delete()
                 except: pass
@@ -208,7 +208,7 @@ class CoinModal(Modal):
 
             embed = discord.Embed(title="🪙 Монетка", description="⏳ Монетка летит...", color=discord.Color.blue())
             
-            if interaction.message and interaction.channel.name.startswith("казино-"):
+            if interaction.message and "казино-" in interaction.channel.name:
                 await interaction.response.send_message(embed=embed)
                 try: await interaction.message.delete()
                 except: pass
@@ -267,7 +267,7 @@ class DiceModal(Modal):
 
             embed = discord.Embed(title=f"🎲 Кости (ставка на {self.guess})", description="⏳ Кости трясутся...", color=discord.Color.blue())
 
-            if interaction.message and interaction.channel.name.startswith("казино-"):
+            if interaction.message and "казино-" in interaction.channel.name:
                 await interaction.response.send_message(embed=embed)
                 try: await interaction.message.delete()
                 except: pass
@@ -353,7 +353,7 @@ class CasinoView(View):
 
     @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.danger, custom_id="casino_leave")
     async def leave_btn(self, interaction: discord.Interaction, button: Button):
-        if interaction.channel.name.startswith("казино-"):
+        if "казино-" in interaction.channel.name:
             await interaction.response.send_message("💣 Стол закрыт! Убираем фишки...", ephemeral=True)
             await asyncio.sleep(2)
             await interaction.channel.delete()

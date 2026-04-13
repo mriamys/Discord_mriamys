@@ -41,10 +41,15 @@ class MriamysBot(commands.Bot):
             from cogs.shop import ShopView
             from cogs.leveling import LevelUpView
             from cogs.casino import CasinoView
+            from cogs.cases import CaseView
+            from cogs.duels import DuelRoomView
+
             self.add_view(ShopView())
             self.add_view(LevelUpView())
             self.add_view(CasinoView())
-            logging.info("Registered ShopView, LevelUpView and CasinoView")
+            self.add_view(CaseView())
+            self.add_view(DuelRoomView())
+            logging.info("Registered all Persistent Views")
         except Exception as e:
             logging.error(f"Failed to register persistent views: {e}")
 

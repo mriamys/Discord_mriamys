@@ -156,13 +156,14 @@ class DuelBetModal(Modal):
                 pass
 
 class DuelRoomView(View):
-    def __init__(self, author_id: int):
+    def __init__(self, author_id=None):
         super().__init__(timeout=None)
         self.author_id = author_id
 
-    @discord.ui.select(cls=UserSelect, placeholder="Кого вызываешь на дуэль?", min_values=1, max_values=1)
+    @discord.ui.select(cls=UserSelect, placeholder="Кого вызываешь на дуэль?", min_values=1, max_values=1, custom_id="duel_user_select")
     async def select_target(self, interaction: discord.Interaction, select: UserSelect):
-        if interaction.user.id != self.author_id:
+        aid = self.author_id if self.author_id else interaction.user.id
+        if interaction.user.id != aid:
             await interaction.response.send_message("❌ Только инициатор комнаты может выбирать соперника.", ephemeral=True)
             return
 
@@ -185,9 +186,10 @@ class DuelRoomView(View):
         balance = user_data.get('vibecoins', 0)
         await interaction.response.send_modal(DuelBetModal(interaction.user, target, balance))
 
-    @discord.ui.button(label="Выйти и удалить комнату", style=discord.ButtonStyle.danger, emoji="🚪", row=1)
+    @discord.ui.button(label="Выйти и удалить комнату", style=discord.ButtonStyle.danger, emoji="🚪", row=1, custom_id="duel_room_exit")
     async def btn_close(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.author_id and not interaction.user.guild_permissions.administrator:
+        aid = self.author_id if self.author_id else interaction.user.id
+        if interaction.user.id != aid and not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Только владелец комнаты или админ может её закрыть.", ephemeral=True)
             return
 
