@@ -110,12 +110,14 @@ def result_color(payout: int, bet: int) -> int:
 
 # ─── Модалки ─────────────────────────────────────────────────────────────────
 
-class SlotsModal(Modal, title="🎰 Слоты — Ставка"):
-    bet_input = TextInput(
-        label=f"Ставка ({MIN_BET}–{MAX_BET:,} 🪙)",
-        placeholder="Введи сумму...",
-        max_length=10
-    )
+    def __init__(self, balance: int):
+        super().__init__(title="🎰 Слоты — Ставка")
+        self.bet_input = TextInput(
+            label=f"Твой баланс: {balance:,} 🪙",
+            placeholder=f"Введи сумму ({MIN_BET}–{MAX_BET:,})...",
+            max_length=10
+        )
+        self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         bet, user_data = await validate(interaction, self.bet_input.value)
@@ -132,11 +134,10 @@ class SlotsModal(Modal, title="🎰 Слоты — Ставка"):
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
         
         if interaction.message and interaction.channel.name.startswith("казино-"):
-            # Возвращаем «старый» вид: удаляем меню и шлём лог + новое меню ниже
+            # Сначала отвечаем, потом удаляем старое сообщение, чтобы не было ошибки
+            await interaction.response.send_message(embed=embed)
             try: await interaction.message.delete()
             except: pass
-            
-            await interaction.response.send_message(embed=embed)
             
             menu_embed = discord.Embed(
                 title=f"🎰 Личный стол: {interaction.user.display_name}",
@@ -150,15 +151,15 @@ class SlotsModal(Modal, title="🎰 Слоты — Ставка"):
 
 
 class CoinModal(Modal):
-    bet_input = TextInput(
-        label=f"Ставка ({MIN_BET}–{MAX_BET:,} 🪙)",
-        placeholder="Введи сумму...",
-        max_length=10
-    )
-
-    def __init__(self, choice: str):
-        super().__init__(title=f"🪙 Ставка на {choice.capitalize()}")
+    def __init__(self, choice: str, balance: int):
+        super().__init__(title=f"🪙 Ставка на {choice}")
         self.choice = choice
+        self.bet_input = TextInput(
+            label=f"Твой баланс: {balance:,} 🪙",
+            placeholder=f"Введи сумму для ставки на {choice}...",
+            max_length=10
+        )
+        self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         bet, user_data = await validate(interaction, self.bet_input.value)
@@ -172,11 +173,9 @@ class CoinModal(Modal):
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
         
         if interaction.message and interaction.channel.name.startswith("казино-"):
-            # Возвращаем «старый» вид: удаляем меню и шлём лог + новое меню ниже
+            await interaction.response.send_message(embed=embed)
             try: await interaction.message.delete()
             except: pass
-            
-            await interaction.response.send_message(embed=embed)
             
             menu_embed = discord.Embed(
                 title=f"🎰 Личный стол: {interaction.user.display_name}",
@@ -185,20 +184,19 @@ class CoinModal(Modal):
             )
             await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
         else:
-            # В публичных каналах возвращаем обычные (не скрытые) сообщения
             await interaction.response.send_message(embed=embed)
 
 
 class DiceModal(Modal):
-    bet_input = TextInput(
-        label=f"Ставка ({MIN_BET}–{MAX_BET:,} 🪙)",
-        placeholder="Введи сумму...",
-        max_length=10
-    )
-
-    def __init__(self, guess: int):
+    def __init__(self, guess: int, balance: int):
         super().__init__(title=f"🎲 Ставка на число {guess}")
         self.guess = guess
+        self.bet_input = TextInput(
+            label=f"Твой баланс: {balance:,} 🪙",
+            placeholder=f"Введи ставку на выпадение {guess}...",
+            max_length=10
+        )
+        self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         bet, user_data = await validate(interaction, self.bet_input.value)
@@ -212,11 +210,9 @@ class DiceModal(Modal):
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
 
         if interaction.message and interaction.channel.name.startswith("казино-"):
-            # Возвращаем «старый» вид: удаляем меню и шлём лог + новое меню ниже
+            await interaction.response.send_message(embed=embed)
             try: await interaction.message.delete()
             except: pass
-            
-            await interaction.response.send_message(embed=embed)
             
             menu_embed = discord.Embed(
                 title=f"🎰 Личный стол: {interaction.user.display_name}",
@@ -225,7 +221,6 @@ class DiceModal(Modal):
             )
             await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
         else:
-            # В публичных каналах возвращаем обычные (не скрытые) сообщения
             await interaction.response.send_message(embed=embed)
 
 
@@ -245,7 +240,9 @@ class DiceSelect(discord.ui.Select):
         
     async def callback(self, interaction: discord.Interaction):
         guess = int(self.values[0])
-        await interaction.response.send_modal(DiceModal(guess))
+        user_data = await db.get_user(str(interaction.user.id))
+        balance = user_data.get("vibecoins", 0)
+        await interaction.response.send_modal(DiceModal(guess, balance))
 
 class CasinoView(View):
     """Persistent menu shown when using setup_casino."""
@@ -255,15 +252,21 @@ class CasinoView(View):
 
     @discord.ui.button(label="Слоты", emoji="🎰", style=discord.ButtonStyle.blurple, custom_id="casino_slots")
     async def slots_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(SlotsModal())
+        user_data = await db.get_user(str(interaction.user.id))
+        balance = user_data.get("vibecoins", 0)
+        await interaction.response.send_modal(SlotsModal(balance))
 
     @discord.ui.button(label="Орёл", emoji="🦅", style=discord.ButtonStyle.secondary, custom_id="casino_coin_heads")
     async def coin_h_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CoinModal("Орёл"))
+        user_data = await db.get_user(str(interaction.user.id))
+        balance = user_data.get("vibecoins", 0)
+        await interaction.response.send_modal(CoinModal("Орёл", balance))
 
     @discord.ui.button(label="Решка", emoji="🪙", style=discord.ButtonStyle.secondary, custom_id="casino_coin_tails")
     async def coin_t_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CoinModal("Решка"))
+        user_data = await db.get_user(str(interaction.user.id))
+        balance = user_data.get("vibecoins", 0)
+        await interaction.response.send_modal(CoinModal("Решка", balance))
 
     @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.danger, custom_id="casino_leave")
     async def leave_btn(self, interaction: discord.Interaction, button: Button):
