@@ -89,19 +89,23 @@ async def validate(interaction: discord.Interaction, bet_str: str) -> tuple[int 
 
 async def apply_result(bot, user_id: str, user_data: dict, bet: int, payout: int, member: discord.Member):
     """Списывает ставку, зачисляет выигрыш, обновляет БД и статистику."""
-    new_spent = user_data.get("casino_spent", 0) + bet
-    new_wins = user_data.get("casino_wins", 0) + payout
-    balance = user_data.get("vibecoins", 0) - bet + payout
-    
-    await db.update_user(user_id, 
-                         vibecoins=max(balance, 0),
-                         casino_spent=new_spent,
-                         casino_wins=new_wins)
-                         
-    # Вызываем событие для ачивок
-    bot.dispatch("casino_played", member, new_spent, new_wins, payout, bet)
-    
-    return max(balance, 0)
+    try:
+        new_spent = user_data.get("casino_spent", 0) + bet
+        new_wins = user_data.get("casino_wins", 0) + payout
+        balance = user_data.get("vibecoins", 0) - bet + payout
+        
+        await db.update_user(user_id, 
+                             vibecoins=max(balance, 0),
+                             casino_spent=new_spent,
+                             casino_wins=new_wins)
+                             
+        # Вызываем событие для ачивок
+        bot.dispatch("casino_played", member, new_spent, new_wins, payout, bet)
+        
+        return max(balance, 0)
+    except Exception as e:
+        print(f"[DB ERROR] apply_result: {e}")
+        raise e
 
 def result_color(payout: int, bet: int) -> int:
     if payout > bet:  return 0x2ECC71   # green
@@ -121,34 +125,43 @@ class SlotsModal(discord.ui.Modal):
         self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        bet, user_data = await validate(interaction, self.bet_input.value)
-        if bet is None:
-            return
+        try:
+            bet, user_data = await validate(interaction, self.bet_input.value)
+            if bet is None:
+                return
 
-        reels         = spin_slots()
-        payout, line, footer = calc_slots(bet, reels)
-        balance       = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
+            reels         = spin_slots()
+            payout, line, footer = calc_slots(bet, reels)
+            balance       = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
 
-        embed = discord.Embed(title="🎰 Слоты", color=result_color(payout, bet))
-        embed.add_field(name="\u200b", value=f"{line}", inline=False)
-        embed.add_field(name="Результат", value=footer, inline=False)
-        embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
-        
-        if interaction.message and interaction.channel.name.startswith("казино-"):
-            # Сначала отвечаем, потом удаляем старое сообщение, чтобы не было ошибки
-            await interaction.response.send_message(embed=embed)
-            try: await interaction.message.delete()
-            except: pass
+            embed = discord.Embed(title="🎰 Слоты", color=result_color(payout, bet))
+            embed.add_field(name="\u200b", value=f"{line}", inline=False)
+            embed.add_field(name="Результат", value=footer, inline=False)
+            embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
             
-            menu_embed = discord.Embed(
-                title=f"🎰 Личный стол: {interaction.user.display_name}",
-                description="Добро пожаловать! Умножай свои **VibeКоины**.\nЖми кнопки ниже, чтобы играть.",
-                color=0xF1C40F
-            )
-            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
-        else:
-            # В публичных каналах возвращаем обычные (не скрытые) сообщения
-            await interaction.response.send_message(embed=embed)
+            if interaction.message and interaction.channel.name.startswith("казино-"):
+                # Сначала отвечаем, потом удаляем старое сообщение, чтобы не было ошибки
+                await interaction.response.send_message(embed=embed)
+                try: await interaction.message.delete()
+                except: pass
+                
+                menu_embed = discord.Embed(
+                    title=f"🎰 Личный стол: {interaction.user.display_name}",
+                    description="Добро пожаловать! Умножай свои **VibeКоины**.\nЖми кнопки ниже, чтобы играть.",
+                    color=0xF1C40F
+                )
+                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
+            else:
+                # В публичных каналах возвращаем обычные (не скрытые) сообщения
+                await interaction.response.send_message(embed=embed)
+        except Exception as e:
+            print(f"[CASINO ERROR] SlotsModal: {e}")
+            import traceback
+            traceback.print_exc()
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ Произошла ошибка: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ Произошла ошибка: {e}", ephemeral=True)
 
 
 class CoinModal(Modal):
@@ -163,29 +176,38 @@ class CoinModal(Modal):
         self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        bet, user_data = await validate(interaction, self.bet_input.value)
-        if bet is None:
-            return
+        try:
+            bet, user_data = await validate(interaction, self.bet_input.value)
+            if bet is None:
+                return
 
-        payout, msg = flip_coin(bet, self.choice)
-        balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
+            payout, msg = flip_coin(bet, self.choice)
+            balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
 
-        embed = discord.Embed(title="🪙 Монетка", description=msg, color=result_color(payout, bet))
-        embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
-        
-        if interaction.message and interaction.channel.name.startswith("казино-"):
-            await interaction.response.send_message(embed=embed)
-            try: await interaction.message.delete()
-            except: pass
+            embed = discord.Embed(title="🪙 Монетка", description=msg, color=result_color(payout, bet))
+            embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
             
-            menu_embed = discord.Embed(
-                title=f"🎰 Личный стол: {interaction.user.display_name}",
-                description="Добро пожаловать! Умножай свои **VibeКоины**.\nЖми кнопки ниже, чтобы играть.",
-                color=0xF1C40F
-            )
-            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
-        else:
-            await interaction.response.send_message(embed=embed)
+            if interaction.message and interaction.channel.name.startswith("казино-"):
+                await interaction.response.send_message(embed=embed)
+                try: await interaction.message.delete()
+                except: pass
+                
+                menu_embed = discord.Embed(
+                    title=f"🎰 Личный стол: {interaction.user.display_name}",
+                    description="Добро пожаловать! Умножай свои **VibeКоины**.\nЖми кнопки ниже, чтобы играть.",
+                    color=0xF1C40F
+                )
+                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
+            else:
+                await interaction.response.send_message(embed=embed)
+        except Exception as e:
+            print(f"[CASINO ERROR] CoinModal: {e}")
+            import traceback
+            traceback.print_exc()
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
 
 
 class DiceModal(Modal):
@@ -200,29 +222,38 @@ class DiceModal(Modal):
         self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        bet, user_data = await validate(interaction, self.bet_input.value)
-        if bet is None:
-            return
+        try:
+            bet, user_data = await validate(interaction, self.bet_input.value)
+            if bet is None:
+                return
 
-        payout, msg = roll_dice(bet, self.guess)
-        balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
+            payout, msg = roll_dice(bet, self.guess)
+            balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
 
-        embed = discord.Embed(title="🎲 Кости", description=msg, color=result_color(payout, bet))
-        embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
+            embed = discord.Embed(title="🎲 Кости", description=msg, color=result_color(payout, bet))
+            embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
 
-        if interaction.message and interaction.channel.name.startswith("казино-"):
-            await interaction.response.send_message(embed=embed)
-            try: await interaction.message.delete()
-            except: pass
-            
-            menu_embed = discord.Embed(
-                title=f"🎰 Личный стол: {interaction.user.display_name}",
-                description="Добро пожаловать! Умножай свои **VibeКоины**.\nЖми кнопки ниже, чтобы играть.",
-                color=0xF1C40F
-            )
-            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
-        else:
-            await interaction.response.send_message(embed=embed)
+            if interaction.message and interaction.channel.name.startswith("казино-"):
+                await interaction.response.send_message(embed=embed)
+                try: await interaction.message.delete()
+                except: pass
+                
+                menu_embed = discord.Embed(
+                    title=f"🎰 Личный стол: {interaction.user.display_name}",
+                    description="Добро пожаловать! Умножай свои **VibeКоины**.\nЖми кнопки ниже, чтобы играть.",
+                    color=0xF1C40F
+                )
+                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
+            else:
+                await interaction.response.send_message(embed=embed)
+        except Exception as e:
+            print(f"[CASINO ERROR] DiceModal: {e}")
+            import traceback
+            traceback.print_exc()
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
 
 
 # ─── Главное меню казино ─────────────────────────────────────────────────────
