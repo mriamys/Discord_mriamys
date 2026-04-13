@@ -131,16 +131,10 @@ class SlotsModal(Modal, title="🎰 Слоты — Ставка"):
         embed.add_field(name="Результат", value=footer, inline=False)
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
         
-        if interaction.message and interaction.channel.name.startswith("казино-"):
-            menu_embed = interaction.message.embeds[0]
-            try:
-                await interaction.message.delete()
-            except:
-                pass
-            await interaction.response.send_message(embed=embed)
-            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
+        if interaction.channel and interaction.channel.name.startswith("казино-"):
+            await interaction.response.edit_message(embed=embed, view=CasinoView())
         else:
-            await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 class CoinModal(Modal):
@@ -165,16 +159,10 @@ class CoinModal(Modal):
         embed = discord.Embed(title="🪙 Монетка", description=msg, color=result_color(payout, bet))
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
         
-        if interaction.message and interaction.channel.name.startswith("казино-"):
-            menu_embed = interaction.message.embeds[0]
-            try:
-                await interaction.message.delete()
-            except:
-                pass
-            await interaction.response.send_message(embed=embed)
-            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
+        if interaction.channel and interaction.channel.name.startswith("казино-"):
+            await interaction.response.edit_message(embed=embed, view=CasinoView())
         else:
-            await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 class DiceModal(Modal):
@@ -199,16 +187,10 @@ class DiceModal(Modal):
         embed = discord.Embed(title="🎲 Кости", description=msg, color=result_color(payout, bet))
         embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
 
-        if interaction.message and interaction.channel.name.startswith("казино-"):
-            menu_embed = interaction.message.embeds[0]
-            try:
-                await interaction.message.delete()
-            except:
-                pass
-            await interaction.response.send_message(embed=embed)
-            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
+        if interaction.channel and interaction.channel.name.startswith("казино-"):
+            await interaction.response.edit_message(embed=embed, view=CasinoView())
         else:
-            await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ─── Главное меню казино ─────────────────────────────────────────────────────
@@ -254,7 +236,7 @@ class CasinoView(View):
             await asyncio.sleep(2)
             await interaction.channel.delete()
         else:
-            await interaction.response.send_message("❌ Эту кнопку можно нажимать только в личном VIP-канале казино.", ephemeral=True)
+            await interaction.response.send_message("❌ Эту кнопку можно нажимать только в личном канале казино.", ephemeral=True)
 
 
 # ─── Cog ─────────────────────────────────────────────────────────────────────

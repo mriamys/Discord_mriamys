@@ -55,9 +55,9 @@ async def _revert_nick(member: discord.Member, original_nick: str | None, delay:
 async def _delete_channel(channel: discord.TextChannel, delay: int = 3600):
     await asyncio.sleep(delay)
     try:
-        await channel.delete(reason="Личный бункер: 1 час истёк")
+        await channel.delete(reason="Время стола/Бункера истёкло")
     except Exception as e:
-        logging.warning(f"Не смог удалить бункер {channel}: {e}")
+        logging.Traceback(e)
 
 
 # ─── 1. Погоняло ─────────────────────────────────────────────────────────────
@@ -186,7 +186,7 @@ class ShopView(View):
         
         # Кнопка личного казино
         casino_btn = Button(
-            label="🎰 VIP Казино",
+            label="🎰 Казино",
             style=discord.ButtonStyle.success,
             custom_id="shop_casino",
             emoji="🎟️"
@@ -221,10 +221,10 @@ class ShopView(View):
             await interaction.followup.send("❌ У бота нет прав для создания приватного канала.", ephemeral=True)
             return
 
-        await interaction.followup.send(f"✅ Твой VIP-стол накрыт: {channel.mention}", ephemeral=True)
+        await interaction.followup.send(f"✅ Твой личный стол накрыт: {channel.mention}", ephemeral=True)
         
         embed = discord.Embed(
-            title=f"🎰 Личный VIP-стол: {interaction.user.display_name}",
+            title=f"🎰 Личный стол: {interaction.user.display_name}",
             description=(
                 "Добро пожаловать в закрытый клуб! Умножай свои **VibeКоины** в тишине и покое.\n\n"
                 "**🎰 Слоты** — классика. 3 в ряд до **x50**!\n"
@@ -236,6 +236,7 @@ class ShopView(View):
         )
         embed.set_image(url="https://media.giphy.com/media/3ohzdFmHSiRBbhzaE8/giphy.gif")
         await channel.send(content=interaction.user.mention, embed=embed, view=CasinoView())
+        asyncio.create_task(_delete_channel(channel, 3600))
 
     def _make_callback(self, item_id: str):
         async def callback(interaction: discord.Interaction):
@@ -288,6 +289,24 @@ class Shop(commands.Cog):
 
         await ctx.send(embed=embed, view=ShopView())
         await ctx.message.delete()
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        """Очищает любые сообщения в канале магазина кроме самого меню."""
+        if message.author.bot:
+            # Не удаляем сообщения бота (само меню магазина), 
+            # но можно удалять системные сообщения Discord если нужно
+            return
+            
+        # Проверяем, есть ли в этом канале меню магазина
+        # Мы можем искать по теме канала или просто по наличию нашего сообщения с эмбедом
+        # Но проще всего: если это канал с названием "магазин", "shop", "покупки"
+        if any(kw in message.channel.name.lower() for kw in ["магазин", "shop", "маркет"]):
+            await asyncio.sleep(10) # Даем 10 секунд почитать, если это была ошибка
+            try:
+                await message.delete()
+            except:
+                pass
 
 
 async def setup(bot):
