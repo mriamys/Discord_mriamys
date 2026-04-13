@@ -71,7 +71,7 @@ def get_casino_embed(user_name=None):
         f"Мин. ставка: **{MIN_BET} 🪙** • Макс: **{MAX_BET:,} 🪙**"
     )
     embed = discord.Embed(title=title, description=description, color=0xF1C40F)
-    embed.set_image(url="https://media.giphy.com/media/3ohzdFmHSiRBbhzaE8/giphy.gif")
+    embed.set_image(url="https://media.tenor.com/7H-O7N7V4-AAAAAi/casino-slots.gif")
     embed.set_footer(text="Все результаты — случайные. Играй ответственно! 🍀")
     return embed
 
@@ -160,14 +160,14 @@ class SlotsModal(discord.ui.Modal):
                 msg = await interaction.original_response()
 
             # Анимация
-            for _ in range(4):
-                await asyncio.sleep(0.8)
+            for _ in range(3):
+                await asyncio.sleep(0.4)
                 t_reels = spin_slots()
                 embed.description = f"**[  {t_reels[0]}  |  {t_reels[1]}  |  {t_reels[2]}  ]**"
                 try: await msg.edit(embed=embed)
                 except: pass
 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
             # Реальный результат
             reels         = spin_slots()
             payout, line, footer = calc_slots(bet, reels)
@@ -220,13 +220,13 @@ class CoinModal(Modal):
                 msg = await interaction.original_response()
 
             icons = ["🦅", "💿"]
-            for _ in range(4):
-                await asyncio.sleep(0.6)
+            for _ in range(3):
+                await asyncio.sleep(0.3)
                 embed.description = f"**[ {random.choice(icons)} ]**"
                 try: await msg.edit(embed=embed)
                 except: pass
 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
 
             payout, msg_text = flip_coin(bet, self.choice)
             balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
@@ -279,13 +279,13 @@ class DiceModal(Modal):
                 msg = await interaction.original_response()
 
             dice_emojis = ["⚀","⚁","⚂","⚃","⚄","⚅"]
-            for _ in range(4):
-                await asyncio.sleep(0.6)
+            for _ in range(3):
+                await asyncio.sleep(0.3)
                 embed.description = f"**[ {random.choice(dice_emojis)} ]**"
                 try: await msg.edit(embed=embed)
                 except: pass
             
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.2)
 
             payout, msg_text = roll_dice(bet, self.guess)
             balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)

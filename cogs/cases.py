@@ -12,18 +12,16 @@ class CaseView(View):
         super().__init__(timeout=None)
         self.user_id = user_id
 
-    @discord.ui.button(label="Открыть Кейс (1000 🪙)", style=discord.ButtonStyle.success, emoji="📦")
-    async def btn_open(self, interaction: discord.Interaction, button: Button):
+    async def _handle_case(self, interaction: discord.Interaction, price: int, min_val: int, max_val: int, case_name: str, emoji: str):
         if str(interaction.user.id) != self.user_id:
             await interaction.response.send_message("Это не твой кейс!", ephemeral=True)
             return
 
         user_data = await db.get_user(self.user_id)
         balance = user_data.get('vibecoins', 0)
-        price = 1000
 
         if balance < price:
-            await interaction.response.send_message(f"❌ Не хватает **VibeКоинов**! У тебя {balance}/{price} 🪙", ephemeral=True)
+            await interaction.response.send_message(f"❌ Не хватает **VibeКоинов** для {case_name}! У тебя {balance}/{price} 🪙", ephemeral=True)
             return
 
         # Снимаем деньги
@@ -33,27 +31,27 @@ class CaseView(View):
         
         interaction.client.dispatch("case_opened", interaction.user, cases_opened)
 
-        win_amount = random.randint(100, 5000)
+        win_amount = random.randint(min_val, max_val)
 
         # Отправляем начальное сообщение с анимацией
-        embed = discord.Embed(title="📦 Открытие Vibe Кейса...", description="[ 🎰 ] КРУТИМ РУЛЕТКУ [ 🎰 ]", color=discord.Color.blue())
+        embed = discord.Embed(title=f"{emoji} Открытие {case_name}...", description="[ 🎰 ] КРУТИМ РУЛЕТКУ [ 🎰 ]", color=discord.Color.blue())
         await interaction.response.send_message(embed=embed)
         
         # Анимация "цифрового потока"
-        steps = [random.randint(100, 5000) for _ in range(3)]
+        steps = [random.randint(min_val, max_val) for _ in range(3)]
         
         for step_val in steps:
-            await asyncio.sleep(0.8)
-            embed.description = f"**[ {step_val} 🪙 ]**"
+            await asyncio.sleep(0.4)
+            embed.description = f"**[  {step_val:04d} 🪙  ]**"
             try:
                 await interaction.edit_original_response(embed=embed)
             except discord.HTTPException:
                 pass
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.3)
 
         # Финальный результат
-        embed.title = "📦 Vibe Кейс открыт!"
+        embed.title = f"{emoji} {case_name} открыт!"
         if win_amount > price:
             embed.color = discord.Color.green()
             embed.description = f"🎉 ОКУП! Выпало: **{win_amount} 🪙**\nТекущий баланс: **{new_balance + win_amount} 🪙**"
@@ -64,7 +62,39 @@ class CaseView(View):
         await db.update_user(self.user_id, vibecoins=new_balance + win_amount)
         await interaction.edit_original_response(embed=embed)
 
-    @discord.ui.button(label="Выйти", style=discord.ButtonStyle.danger, emoji="🚪")
+    @discord.ui.button(label="Дерево (100 🪙)", style=discord.ButtonStyle.secondary, emoji="🪵", row=0)
+    async def btn_wooden(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 100, 10, 500, "Деревянного Кейса", "🪵")
+
+    @discord.ui.button(label="Камень (300 🪙)", style=discord.ButtonStyle.secondary, emoji="🪨", row=0)
+    async def btn_stone(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 300, 50, 1200, "Каменного Кейса", "🪨")
+
+    @discord.ui.button(label="Железо (500 🪙)", style=discord.ButtonStyle.secondary, emoji="⚙️", row=0)
+    async def btn_iron(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 500, 100, 2500, "Железного Кейса", "⚙️")
+
+    @discord.ui.button(label="Бронза (1k 🪙)", style=discord.ButtonStyle.primary, emoji="📦", row=0)
+    async def btn_bronze(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 1000, 100, 5000, "Бронзового Кейса", "📦")
+
+    @discord.ui.button(label="Серебро (5k 🪙)", style=discord.ButtonStyle.secondary, emoji="💿", row=0)
+    async def btn_silver(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 5000, 1000, 15000, "Серебряного Кейса", "💿")
+
+    @discord.ui.button(label="Нефрит (8k 🪙)", style=discord.ButtonStyle.secondary, emoji="🔮", row=1)
+    async def btn_jade(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 8000, 2000, 30000, "Нефритового Кейса", "🔮")
+
+    @discord.ui.button(label="Золото (10k 🪙)", style=discord.ButtonStyle.success, emoji="🏵️", row=1)
+    async def btn_gold(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 10000, 3000, 40000, "Золотого Кейса", "🏵️")
+
+    @discord.ui.button(label="Бриллиант (50k 🪙)", style=discord.ButtonStyle.primary, emoji="💎", row=1)
+    async def btn_diamond(self, interaction: discord.Interaction, button: Button):
+        await self._handle_case(interaction, 50000, 10000, 250000, "Бриллиантового Кейса", "💎")
+
+    @discord.ui.button(label="Выйти", style=discord.ButtonStyle.danger, emoji="🚪", row=2)
     async def btn_close(self, interaction: discord.Interaction, button: Button):
         if str(interaction.user.id) != self.user_id and not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Только владелец комнаты или админ может её закрыть.", ephemeral=True)
@@ -111,15 +141,21 @@ class Cases(commands.Cog):
         await interaction.followup.send(f"✅ Комната создана: {channel.mention}", ephemeral=True)
         
         embed = discord.Embed(
-            title="📦 Vibe Кейсы",
+            title="✨ Vibe Кейсы",
             description=(
-                "Цена одного кейса: **1000 🪙**\n"
-                "Выпасть может случайная сумма от **100 🪙** до **5000 🪙**!\n\n"
+                "🪵 **Дерево (100 🪙):** выигрыш от 10 до 500\n"
+                "🪨 **Камень (300 🪙):** выигрыш от 50 до 1,200\n"
+                "⚙️ **Железо (500 🪙):** выигрыш от 100 до 2,500\n"
+                "📦 **Бронза (1,000 🪙):** выигрыш от 100 до 5,000\n"
+                "💿 **Серебро (5,000 🪙):** выигрыш от 1,000 до 15,000\n"
+                "🔮 **Нефрит (8,000 🪙):** выигрыш от 2,000 до 30,000\n"
+                "🏵️ **Золото (10,000 🪙):** выигрыш от 3,000 до 40,000\n"
+                "💎 **Бриллиант (50,000 🪙):** выигрыш от 10,000 до 250,000\n\n"
                 "Жми кнопку ниже, чтобы попытать удачу. Когда надоест - жми Выйти."
             ),
             color=COLOR_MAIN
         )
-        embed.set_image(url="https://media.giphy.com/media/26ufncG0MtwzYulkk/giphy.gif")
+        embed.set_image(url="https://media1.tenor.com/m/Znt_b7v133IAAAAd/mystery-box.gif")
         
         await channel.send(content=interaction.user.mention, embed=embed, view=CaseView(str(interaction.user.id)))
 

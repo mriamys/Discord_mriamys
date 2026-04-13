@@ -261,6 +261,9 @@ class ShopView(View):
                     return
                 # Списание и регистрация будет обрабатываться диспетчером или когом audio_memes
                 new_balance = await deduct(interaction, "voice_meme", user_data)
+                memes = user_data.get('memes_ordered', 0) + 1
+                await db.update_user(str(interaction.user.id), memes_ordered=memes)
+                interaction.client.dispatch("meme_ordered", interaction.user, memes)
                 interaction.client.dispatch("voice_meme_purchased", interaction.user, interaction.user.voice.channel)
                 await interaction.response.send_message(f"🔊 Заказ принят! В течение часа жди аудио-троллинг в канале {interaction.user.voice.channel.mention}.\nОстаток: {new_balance} 🪙", ephemeral=True)
 

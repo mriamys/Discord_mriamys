@@ -47,16 +47,16 @@ class DuelAcceptView(View):
         msg = await self.room_channel.send(content=f"{self.challenger.mention} 🆚 {self.target.mention}", embed=embed)
 
         # Анимация битвы (перебор цифр)
-        for _ in range(4):
-            await asyncio.sleep(1)
+        for _ in range(3):
+            await asyncio.sleep(0.4)
             c_roll, t_roll = random.randint(1, 100), random.randint(1, 100)
-            embed.description = f"**{self.challenger.display_name}**: `[ {c_roll} ]`\n**{self.target.display_name}**: `[ {t_roll} ]`"
+            embed.description = f"**{self.challenger.display_name}**: 🎲 `[  {c_roll:02d}  ]`\n**{self.target.display_name}**: 🎲 `[  {t_roll:02d}  ]`"
             try:
                 await msg.edit(embed=embed)
             except discord.HTTPException:
                 pass
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.4)
         
         c_final = random.randint(1, 100)
         t_final = random.randint(1, 100)
@@ -70,8 +70,8 @@ class DuelAcceptView(View):
 
         embed.title = "🏆 ДУЭЛЬ ЗАВЕРШЕНА"
         embed.description = (
-            f"**{self.challenger.display_name}**: `[ {c_final} ]`\n"
-            f"**{self.target.display_name}**: `[ {t_final} ]`\n\n"
+            f"**{self.challenger.display_name}**: 🎲 `[  {c_final:02d}  ]`\n"
+            f"**{self.target.display_name}**: 🎲 `[  {t_final:02d}  ]`\n\n"
             f"🎉 Победитель: {winner.mention}! Забрал весь банк: **{bank} 🪙**"
         )
         embed.color = discord.Color.green()
@@ -98,13 +98,18 @@ class DuelAcceptView(View):
             await interaction.response.edit_message(content=f"Отменено: {self.challenger.display_name} передумал.", view=self)
 
 
-class DuelBetModal(Modal, title="Размер ставки"):
-    bet_input = TextInput(label="Сумма (макс 50000)", placeholder="Например: 1000", max_length=6)
-
-    def __init__(self, challenger: discord.Member, target: discord.Member):
-        super().__init__()
+class DuelBetModal(Modal):
+    def __init__(self, challenger: discord.Member, target: discord.Member, balance: int):
+        super().__init__(title=f"Ставка (Баланс: {balance})")
         self.challenger = challenger
         self.target = target
+        
+        self.bet_input = TextInput(
+            label=f"Сумма ставки", 
+            placeholder="Например: 1000", 
+            max_length=10
+        )
+        self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -115,13 +120,14 @@ class DuelBetModal(Modal, title="Размер ставки"):
             await interaction.response.send_message("❌ Введи нормальное число больше 0.", ephemeral=True)
             return
 
-        if bet > 50000:
-            await interaction.response.send_message("❌ Максимальная ставка: 50,000 🪙", ephemeral=True)
-            return
-
         c_data = await db.get_user(str(self.challenger.id))
         if c_data.get('vibecoins', 0) < bet:
             await interaction.response.send_message(f"❌ У тебя нет **{bet} 🪙**! На балансе: {c_data.get('vibecoins', 0)}", ephemeral=True)
+            return
+            
+        t_data = await db.get_user(str(self.target.id))
+        if t_data.get('vibecoins', 0) < bet:
+            await interaction.response.send_message(f"❌ У {self.target.display_name} нет **{bet} 🪙**! На балансе: {t_data.get('vibecoins', 0)}", ephemeral=True)
             return
 
         await interaction.response.send_message(
@@ -155,7 +161,9 @@ class DuelRoomView(View):
         except:
             pass
 
-        await interaction.response.send_modal(DuelBetModal(interaction.user, target))
+        user_data = await db.get_user(str(interaction.user.id))
+        balance = user_data.get('vibecoins', 0)
+        await interaction.response.send_modal(DuelBetModal(interaction.user, target, balance))
 
     @discord.ui.button(label="Выйти и удалить комнату", style=discord.ButtonStyle.danger, emoji="🚪", row=1)
     async def btn_close(self, interaction: discord.Interaction, button: Button):
@@ -206,7 +214,7 @@ class Duels(commands.Cog):
         embed = discord.Embed(
             title="⚔️ Дуэльный Клуб",
             description=(
-                "Выбери жертву из списка ниже и введи сумму ставки (макс 50,000).\n"
+                "Выбери жертву из списка ниже и введи сумму ставки.\n"
                 "Если оппонент примет вызов - вы скидываетесь в общий банк и бот кидает кости.\n"
                 "Победитель забирает всё!"
             ),
