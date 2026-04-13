@@ -45,7 +45,9 @@ class Database:
                         xp_boost_until DATETIME DEFAULT NULL,
                         cases_opened INT DEFAULT 0,
                         duels_won INT DEFAULT 0,
-                        memes_ordered INT DEFAULT 0
+                        memes_ordered INT DEFAULT 0,
+                        voice_memes_until DATETIME DEFAULT NULL,
+                        voice_memes_count INT DEFAULT 0
                     )
                 ''')
                 
@@ -59,7 +61,9 @@ class Database:
                     ("xp_boost_until", "DATETIME DEFAULT NULL"),
                     ("cases_opened", "INT DEFAULT 0"),
                     ("duels_won", "INT DEFAULT 0"),
-                    ("memes_ordered", "INT DEFAULT 0")
+                    ("memes_ordered", "INT DEFAULT 0"),
+                    ("voice_memes_until", "DATETIME DEFAULT NULL"),
+                    ("voice_memes_count", "INT DEFAULT 0")
                 ]
                 
                 for col_name, col_type in columns_to_add:
@@ -97,7 +101,7 @@ class Database:
                 user = await cur.fetchone()
                 if not user:
                     await cur.execute("INSERT INTO users (user_id) VALUES (%s)", (str(user_id),))
-                    return {"user_id": str(user_id), "vibecoins": 0, "xp": 0, "level": 0, "streak": 0, "last_daily": None, "voice_time_seconds": 0, "msg_count": 0, "shop_spent": 0, "nick_changes": 0, "casino_spent": 0, "casino_wins": 0, "xp_boost_until": None, "cases_opened": 0, "duels_won": 0, "memes_ordered": 0}
+                    return {"user_id": str(user_id), "vibecoins": 0, "xp": 0, "level": 0, "streak": 0, "last_daily": None, "voice_time_seconds": 0, "msg_count": 0, "shop_spent": 0, "nick_changes": 0, "casino_spent": 0, "casino_wins": 0, "xp_boost_until": None, "cases_opened": 0, "duels_won": 0, "memes_ordered": 0, "voice_memes_until": None, "voice_memes_count": 0}
                 return user
                 
     async def get_achievements(self, user_id: str):
@@ -145,6 +149,14 @@ class Database:
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(f"SELECT * FROM users ORDER BY {order_by} LIMIT %s", (limit,))
+                return await cur.fetchall()
+
+    async def get_active_voice_memes(self):
+        """Возвращает список пользователей, у которых активен аудио-троллинг."""
+        from datetime import datetime
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT * FROM users WHERE voice_memes_until > %s AND voice_memes_count < 10", (datetime.utcnow(),))
                 return await cur.fetchall()
 
 db = Database()

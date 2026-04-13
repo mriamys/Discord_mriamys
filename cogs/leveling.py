@@ -442,9 +442,31 @@ class Leveling(commands.Cog):
         embed.add_field(name="💬 Сообщений", value=f"{msgs}", inline=True)
         embed.add_field(name="🔥 Стрик", value=f"{streak} дней", inline=True)
         
-        embed.add_field(name="🛒 Траты в магазине", value=f"{spent} VC", inline=True)
         embed.add_field(name="🤡 Смен ников", value=f"{nicks}", inline=True)
         
+        # Активные бонусы
+        from datetime import datetime
+        now = datetime.utcnow()
+        bonuses = []
+        
+        # XP Boost
+        boost_until = user_data.get('xp_boost_until')
+        if boost_until and boost_until > now:
+            diff = boost_until - now
+            mins_left = int(diff.total_seconds() // 60)
+            bonuses.append(f"⚡ **Буст опыта x2**: ещё {mins_left} мин.")
+            
+        # Voice Memes
+        v_until = user_data.get('voice_memes_until')
+        v_count = user_data.get('voice_memes_count', 0)
+        if v_until and v_until > now and v_count < 10:
+            diff = v_until - now
+            mins_left = int(diff.total_seconds() // 60)
+            bonuses.append(f"🔊 **Рандом высер**: {10 - v_count}/10 раз (ещё {mins_left} мин.)")
+            
+        if bonuses:
+            embed.add_field(name="✨ Активные бонусы", value="\n".join(bonuses), inline=False)
+            
         await ctx.send(embed=embed)
 
 async def setup(bot):

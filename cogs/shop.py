@@ -259,11 +259,29 @@ class ShopView(View):
                 if not interaction.user.voice:
                     await interaction.response.send_message("❌ Ты должен быть в голосовом канале, чтобы купить высеры!", ephemeral=True)
                     return
-                # Списание и регистрация будет обрабатываться диспетчером или когом audio_memes
+                
+                # Проверка: активен ли уже высер (у самого юзера или вообще в этом канале)
+                now = datetime.utcnow()
+                v_until = user_data.get('voice_memes_until')
+                v_count = user_data.get('voice_memes_count', 0)
+                if v_until and v_until > now and v_count < 10:
+                    await interaction.response.send_message("❌ У тебя уже заказан аудио-троллинг! Дождись его окончания, прежде чем покупать новый.", ephemeral=True)
+                    return
+                
+                # Проверка по каналу
+                am_cog = interaction.client.get_cog("AudioMemes")
+                if am_cog and am_cog.is_channel_active(interaction.user.voice.channel.id):
+                    await interaction.response.send_message("❌ В этом канале уже кто-то заказал аудио-троллинг! Дождись его окончания.", ephemeral=True)
+                    return
+
                 new_balance = await deduct(interaction, "voice_meme", user_data)
-                memes = user_data.get('memes_ordered', 0) + 1
-                await db.update_user(str(interaction.user.id), memes_ordered=memes)
-                interaction.client.dispatch("meme_ordered", interaction.user, memes)
+                
+                # Сохраняем в БД: +1 час и сброс счетчика
+                until = now + timedelta(hours=1)
+                await db.update_user(str(interaction.user.id), 
+                                     voice_memes_until=until, 
+                                     voice_memes_count=0)
+                
                 interaction.client.dispatch("voice_meme_purchased", interaction.user, interaction.user.voice.channel)
                 await interaction.response.send_message(f"🔊 Заказ принят! В течение часа жди аудио-троллинг в канале {interaction.user.voice.channel.mention}.\nОстаток: {new_balance} 🪙", ephemeral=True)
 
