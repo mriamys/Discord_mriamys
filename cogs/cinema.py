@@ -103,7 +103,6 @@ class CinemaSelectView(discord.ui.View):
         select_obj = self.children[0]
         idx = int(select_obj.values[0])
         magnet, title = self.results[idx]
-        
         success, info = await self.cog.add_to_torrserver(magnet)
         
         if not success:
@@ -114,14 +113,19 @@ class CinemaSelectView(discord.ui.View):
             target_application_id=self.cog.activity_id
         )
 
+        hash_code = info.get('hash') if isinstance(info, dict) else None
+        # Ссылка на наш новый плеер
+        player_url = f"{self.cog.ts_url}/player.html?hash={hash_code}"
+
         final_embed = discord.Embed(
             title="🎬 Готово к просмотру!",
-            description=f"Фильм: **{title[:100]}**\n\nНажимай на кнопку, заходи в активность и включай его!",
+            description=f"Фильм: **{title[:100]}**\n\n1. Нажми **'Запустить активность'**.\n2. Если там белый экран, используй вторую кнопку ниже.",
             color=COLOR_SUCCESS
         )
         
         btn_view = discord.ui.View()
-        btn_view.add_item(discord.ui.Button(label="🚀 Запустить плеер", url=invite.url))
+        btn_view.add_item(discord.ui.Button(label="🚀 Запустить активность", url=invite.url))
+        btn_view.add_item(discord.ui.Button(label="🔗 Открыть в браузере", url=player_url))
         await interaction.followup.send(embed=final_embed, view=btn_view)
 
 async def setup(bot):
