@@ -10,7 +10,7 @@ from config import COLOR_SUCCESS, COLOR_ERROR
 class Cinema(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Удаляем лишний слэш в конце URL
+        # Внешний URL для инвайтов
         url = os.getenv("TORRSERVER_URL", "")
         self.ts_url = url.rstrip('/') 
         self.ts_user = os.getenv("TORRSERVER_USER")
@@ -35,15 +35,14 @@ class Cinema(commands.Cog):
                     titles = re.findall(r'<a href="/torrent/.*?">(.*?)</a>', html)
                     
                     results = []
-                    for i in range(min(len(magnets), 20)): # Берем побольше для фильтрации
+                    for i in range(min(len(magnets), 20)):
                         title = titles[i].replace("<b>", "").replace("</b>", "")
-                        # Фильтруем служебные ссылки Rutor
                         trash_keywords = ["rutor.info", "rutor.is", "правила", "путеводитель", "адрес", "блокировка"]
                         if any(word in title.lower() for word in trash_keywords):
                             continue
                             
                         results.append((magnets[i], title))
-                        if len(results) >= 5: # Нам нужно только 5 чистых результатов
+                        if len(results) >= 5:
                             break
                     return results
             except Exception as e:
@@ -51,21 +50,31 @@ class Cinema(commands.Cog):
                 return []
 
     async def add_to_torrserver(self, magnet):
-        """Добавление в TorrServer с фиксом двойных слэшей"""
+        """Добавление в TorrServer с приоритетом на localhost"""
         auth = aiohttp.BasicAuth(self.ts_user, self.ts_pass)
         async with aiohttp.ClientSession(auth=auth) as session:
+            data = {"action": "add", "link": magnet, "save": True}
+            
+            # Попытка 1: Через Localhost (самое надежное на одном VPS)
             try:
-                data = {"action": "add", "link": magnet, "save": True}
-                # Самостоятельно формируем URL без лишних слэшей
-                api_url = f"{self.ts_url}/torrents"
-                async with session.post(api_url, json=data) as resp:
-                    if resp.status != 200:
-                        return None
-                    res = await resp.json()
-                    return res.get("hash")
+                async with session.post("http://127.0.0.1:8090/torrents", json=data, timeout=5) as resp:
+                    if resp.status == 200:
+                        res = await resp.json()
+                        return res.get("hash")
             except Exception as e:
-                print(f"TorrServer error: {e}")
-                return None
+                print(f"TorrServer Localhost fail: {e}")
+
+            # Попытка 2: Через внешний URL (если TorrServer на другом порту или IP)
+            try:
+                api_url = f"{self.ts_url}/torrents"
+                async with session.post(api_url, json=data, timeout=5) as resp:
+                    if resp.status == 200:
+                        res = await resp.json()
+                        return res.get("hash")
+            except Exception as e:
+                print(f"TorrServer External fail: {e}")
+                
+            return None
 
     @commands.hybrid_command(name="cinema", description="Найти фильм и запустить в твоем плеере")
     async def cinema(self, ctx, *, query: str):
@@ -108,7 +117,7 @@ class Cinema(commands.Cog):
                 
                 movie_hash = await self.cog.add_to_torrserver(magnet)
                 if not movie_hash:
-                    return await interaction.followup.send(f"❌ Ошибка связи с TorrServer. Проверь `.env`.\n*Убедись, что адрес {self.cog.ts_url} доступен с VPS.*")
+                    return await interaction.followup.send(f"❌ Не удалось добавить в TorrServer ни локально, ни через домен. Проверь, запущен ли он.")
 
                 # Создаем Activity инвайт
                 invite = await self.author.voice.channel.create_invite(
