@@ -10,16 +10,14 @@ from config import COLOR_SUCCESS, COLOR_ERROR
 class Cinema(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Внешний URL для инвайтов
         url = os.getenv("TORRSERVER_URL", "")
         self.ts_url = url.rstrip('/') 
-        self.ts_user = os.getenv("TORRSERVER_USER")
-        self.ts_pass = os.getenv("TORRSERVER_PASS")
-        # Твой личный ID приложения
+        self.ts_user = os.getenv("TORRSERVER_USER", "")
+        self.ts_pass = os.getenv("TORRSERVER_PASS", "")
         self.activity_id = 1493748753587376310 
 
     async def search_torrents(self, query):
-        """Улучшенный поиск торрентов с фильтрацией инфо-мусора"""
+        """Поиск торрентов на rutor"""
         async with aiohttp.ClientSession() as session:
             try:
                 search_query = urllib.parse.quote(query)
@@ -50,30 +48,31 @@ class Cinema(commands.Cog):
                 return []
 
     async def add_to_torrserver(self, magnet):
-        """Добавление в TorrServer с приоритетом на localhost"""
-        auth = aiohttp.BasicAuth(self.ts_user, self.ts_pass)
-        async with aiohttp.ClientSession(auth=auth) as session:
+        """Добавление в TorrServer с гибкой авторизацией"""
+        auth = None
+        if self.ts_user and self.ts_pass:
+            auth = aiohttp.BasicAuth(self.ts_user, self.ts_pass)
+
+        # Таймаут побольше, так как торрент может «задумчиво» добавляться
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with aiohttp.ClientSession(auth=auth, timeout=timeout) as session:
             data = {"action": "add", "link": magnet, "save": True}
             
-            # Попытка 1: Через Localhost (самое надежное на одном VPS)
-            try:
-                async with session.post("http://127.0.0.1:8090/torrents", json=data, timeout=5) as resp:
-                    if resp.status == 200:
-                        res = await resp.json()
-                        return res.get("hash")
-            except Exception as e:
-                print(f"TorrServer Localhost fail: {e}")
-
-            # Попытка 2: Через внешний URL (если TorrServer на другом порту или IP)
-            try:
-                api_url = f"{self.ts_url}/torrents"
-                async with session.post(api_url, json=data, timeout=5) as resp:
-                    if resp.status == 200:
-                        res = await resp.json()
-                        return res.get("hash")
-            except Exception as e:
-                print(f"TorrServer External fail: {e}")
-                
+            # Пробуем по очереди: локально и через домен
+            urls = ["http://127.0.0.1:8090/torrents", f"{self.ts_url}/torrents"]
+            
+            for url in urls:
+                if not url.startswith("http"): continue
+                try:
+                    async with session.post(url, json=data) as resp:
+                        if resp.status == 200:
+                            res = await resp.json()
+                            return res.get("hash")
+                        else:
+                            # Если 401 - значит пароль не подошел или нужен
+                            print(f"[Cinema] Status {resp.status} on {url}")
+                except Exception as e:
+                    print(f"[Cinema] Request failed for {url}: {e}")
             return None
 
     @commands.hybrid_command(name="cinema", description="Найти фильм и запустить в твоем плеере")
@@ -89,7 +88,7 @@ class Cinema(commands.Cog):
 
         embed = discord.Embed(
             title="🎥 Кинотеатр mriamys",
-            description=f"Найденные раздачи для: **{query}**\nВыбери вариант для загрузки в плеер:",
+            description=f"Найденные раздачи для: **{query}**\nВыбери вариант:",
             color=COLOR_SUCCESS
         )
 
@@ -117,9 +116,8 @@ class Cinema(commands.Cog):
                 
                 movie_hash = await self.cog.add_to_torrserver(magnet)
                 if not movie_hash:
-                    return await interaction.followup.send(f"❌ Не удалось добавить в TorrServer ни локально, ни через домен. Проверь, запущен ли он.")
+                    return await interaction.followup.send(f"❌ TorrServer не ответил. Проверь логи или настройки .env (логин/пароль/порт).")
 
-                # Создаем Activity инвайт
                 invite = await self.author.voice.channel.create_invite(
                     target_type=discord.InviteTarget.embedded_application,
                     target_application_id=self.cog.activity_id
@@ -128,10 +126,10 @@ class Cinema(commands.Cog):
                 finish_embed = discord.Embed(
                     title=f"🎬 Фильм добавлен!",
                     description=(
-                        f"**Название:** {title[:100]}\n\n"
-                        "**Инструкция:**\n"
-                        "1. Нажми кнопку **🚀 Запустить кино**.\n"
-                        "2. В открывшемся окне Дискорда найди этот фильм и нажми Play."
+                        f"**Раздача:** {title[:100]}\n\n"
+                        "**Что делать дальше:**\n"
+                        "1. Жми кнопку ниже.\n"
+                        "2. В плеере выбери этот фильм."
                     ),
                     color=COLOR_SUCCESS
                 )
