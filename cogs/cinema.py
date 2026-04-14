@@ -10,14 +10,16 @@ from config import COLOR_SUCCESS, COLOR_ERROR
 class Cinema(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.ts_url = os.getenv("TORRSERVER_URL")
+        # Удаляем лишний слэш в конце URL
+        url = os.getenv("TORRSERVER_URL", "")
+        self.ts_url = url.rstrip('/') 
         self.ts_user = os.getenv("TORRSERVER_USER")
         self.ts_pass = os.getenv("TORRSERVER_PASS")
         # Твой личный ID приложения
         self.activity_id = 1493748753587376310 
 
     async def search_torrents(self, query):
-        """Поиск торрентов на Rutor"""
+        """Улучшенный поиск торрентов с фильтрацией инфо-мусора"""
         async with aiohttp.ClientSession() as session:
             try:
                 search_query = urllib.parse.quote(query)
@@ -29,25 +31,36 @@ class Cinema(commands.Cog):
                         return []
                     html = await resp.text()
                     
-                    patt = r'href="(magnet:\?xt=urn:btih:[^"]+)"'
-                    magnets = re.findall(patt, html)
+                    magnets = re.findall(r'href="(magnet:\?xt=urn:btih:[^"]+)"', html)
                     titles = re.findall(r'<a href="/torrent/.*?">(.*?)</a>', html)
                     
                     results = []
-                    for i in range(min(len(magnets), 5)):
-                        results.append((magnets[i], titles[i]))
+                    for i in range(min(len(magnets), 20)): # Берем побольше для фильтрации
+                        title = titles[i].replace("<b>", "").replace("</b>", "")
+                        # Фильтруем служебные ссылки Rutor
+                        trash_keywords = ["rutor.info", "rutor.is", "правила", "путеводитель", "адрес", "блокировка"]
+                        if any(word in title.lower() for word in trash_keywords):
+                            continue
+                            
+                        results.append((magnets[i], title))
+                        if len(results) >= 5: # Нам нужно только 5 чистых результатов
+                            break
                     return results
             except Exception as e:
                 print(f"Search error: {e}")
                 return []
 
     async def add_to_torrserver(self, magnet):
-        """Добавление в TorrServer"""
+        """Добавление в TorrServer с фиксом двойных слэшей"""
         auth = aiohttp.BasicAuth(self.ts_user, self.ts_pass)
         async with aiohttp.ClientSession(auth=auth) as session:
             try:
                 data = {"action": "add", "link": magnet, "save": True}
-                async with session.post(f"{self.ts_url}/torrents", json=data) as resp:
+                # Самостоятельно формируем URL без лишних слэшей
+                api_url = f"{self.ts_url}/torrents"
+                async with session.post(api_url, json=data) as resp:
+                    if resp.status != 200:
+                        return None
                     res = await resp.json()
                     return res.get("hash")
             except Exception as e:
@@ -63,11 +76,11 @@ class Cinema(commands.Cog):
         
         results = await self.search_torrents(query)
         if not results:
-            return await ctx.send(embed=discord.Embed(description="❌ Фильм не найден на Rutor.", color=COLOR_ERROR))
+            return await ctx.send(embed=discord.Embed(description="❌ По этому запросу ничего не найдено.", color=COLOR_ERROR))
 
         embed = discord.Embed(
             title="🎥 Кинотеатр mriamys",
-            description=f"Найденные раздачи для: **{query}**\nВыбери вариант, и я добавлю его в плеер.",
+            description=f"Найденные раздачи для: **{query}**\nВыбери вариант для загрузки в плеер:",
             color=COLOR_SUCCESS
         )
 
@@ -95,7 +108,7 @@ class Cinema(commands.Cog):
                 
                 movie_hash = await self.cog.add_to_torrserver(magnet)
                 if not movie_hash:
-                    return await interaction.followup.send("❌ Не удалось добавить в TorrServer. Проверь настройки в .env")
+                    return await interaction.followup.send(f"❌ Ошибка связи с TorrServer. Проверь `.env`.\n*Убедись, что адрес {self.cog.ts_url} доступен с VPS.*")
 
                 # Создаем Activity инвайт
                 invite = await self.author.voice.channel.create_invite(
@@ -104,12 +117,12 @@ class Cinema(commands.Cog):
                 )
 
                 finish_embed = discord.Embed(
-                    title=f"🎬 Фильм добавлен: {title[:50]}...",
+                    title=f"🎬 Фильм добавлен!",
                     description=(
-                        "**Что делать дальше?**\n"
-                        "1. Нажми кнопку **🚀 Запустить кино** ниже.\n"
-                        "2. В открывшемся окне ты увидишь список своих фильмов.\n"
-                        "3. Просто нажми на иконку этого фильма (он будет первым) и наслаждайся!"
+                        f"**Название:** {title[:100]}\n\n"
+                        "**Инструкция:**\n"
+                        "1. Нажми кнопку **🚀 Запустить кино**.\n"
+                        "2. В открывшемся окне Дискорда найди этот фильм и нажми Play."
                     ),
                     color=COLOR_SUCCESS
                 )
