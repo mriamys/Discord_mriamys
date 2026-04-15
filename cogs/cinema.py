@@ -57,7 +57,9 @@ class Cinema(commands.Cog):
     async def search_torrents(self, query):
         async with aiohttp.ClientSession() as session:
             try:
-                search_query = urllib.parse.quote(query)
+                # Автоматическая фильтрация: добавляем "mp4" для гарантированного звука (AAC) в браузере Дискорда
+                forced_query = query if "mp4" in query.lower() else f"{query} mp4"
+                search_query = urllib.parse.quote(forced_query)
                 url = f"https://rutor.info/search/0/0/000/0/{search_query}"
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
                 async with session.get(url, headers=headers, timeout=10) as resp:
