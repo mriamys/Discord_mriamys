@@ -57,9 +57,7 @@ class Cinema(commands.Cog):
     async def search_torrents(self, query):
         async with aiohttp.ClientSession() as session:
             try:
-                # Автоматическая фильтрация: добавляем "mp4" для гарантированного звука (AAC) в браузере Дискорда
-                forced_query = query if "mp4" in query.lower() else f"{query} mp4"
-                search_query = urllib.parse.quote(forced_query)
+                search_query = urllib.parse.quote(query)
                 url = f"https://rutor.info/search/0/0/000/0/{search_query}"
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
                 async with session.get(url, headers=headers, timeout=10) as resp:
@@ -90,12 +88,36 @@ class Cinema(commands.Cog):
 
                         # Ищем сидов
                         seeds_match = re.search(r'<span class="green">(\d+)</span>', row)
-                        seeds = seeds_match.group(1) if seeds_match else "0"
+                        seeds = int(seeds_match.group(1)) if seeds_match else 0
 
-                        results.append((magnet, title, size, seeds))
-                        if len(results) >= 8: break
+                        # Умная маркировка звука
+                        tl = title.lower()
+                        # Высший приоритет отдаем релизам для WEB (iTunes, Apple TV, WEB-DLRip, MP4) - там 90% звук будет работать
+                        is_good = any(x in tl for x in ["mp4", "itunes", "apple", "aac", "web-dl", "webrip", "hdtv"])
+                        # Низший приоритет отдаем BD-Rip и 4K REMUX, где звук всегда AC3/DTS (не работает в браузере)
+                        is_bad = any(x in tl for x in ["ac3", "dts", "bdrip", "brrip", "remux", "hdr", "2160p"])
 
-                    return results
+                        if is_good and not is_bad:
+                            icon = "✅[ЕСТЬ ЗВУК]"
+                            score = 2
+                        elif is_bad:
+                            icon = "🔇[НЕТ ЗВУКА]"
+                            score = 0
+                        else:
+                            icon = "❓[звук 50/50]"
+                            score = 1
+                            
+                        # Чистим тайтл чтобы влез в Дискорд
+                        clean_title = f"{icon} {title[:70]}"
+                        
+                        results.append((magnet, clean_title, size, seeds, score))
+                        if len(results) >= 40: break
+
+                    # Сортируем: сначала с рабочим звуком (score), затем по сидам (рабочие раздачи)
+                    results.sort(key=lambda x: (x[4], x[3]), reverse=True)
+                    
+                    # Возвращаем только топ-8 для менюшки Дискорда (убирая технический score)
+                    return [(r[0], r[1], r[2], str(r[3])) for r in results[:8]]
             except Exception as e:
                 logger.error(f"Search error: {e}")
                 return []
