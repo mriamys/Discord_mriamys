@@ -59,18 +59,40 @@ class Cinema(commands.Cog):
             try:
                 search_query = urllib.parse.quote(query)
                 url = f"https://rutor.info/search/0/0/000/0/{search_query}"
-                headers = {'User-Agent': 'Mozilla/5.0'}
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
                 async with session.get(url, headers=headers, timeout=10) as resp:
                     if resp.status != 200: return []
                     html = await resp.text()
-                    magnets = re.findall(r'href="(magnet:\?xt=urn:btih:[^"]+)"', html)
-                    titles = re.findall(r'<a href="/torrent/.*?">(.*?)</a>', html)
+
+                    # Парсим блоки таблицы (tr)
+                    rows = re.findall(r'<tr class="(?:g|tum)">.*?</tr>', html, re.DOTALL)
                     results = []
-                    for i in range(min(len(magnets), 20)):
-                        title = titles[i].replace("<b>", "").replace("</b>", "")
-                        if any(word in title.lower() for word in ["rutor.info", "rutor.is", "правила", "путеводитель"]): continue
-                        results.append((magnets[i], title))
-                        if len(results) >= 5: break
+
+                    for row in rows:
+                        # Ищем magnet
+                        magnet_match = re.search(r'href="(magnet:\?xt=urn:btih:[^"]+)"', row)
+                        if not magnet_match: continue
+                        magnet = magnet_match.group(1)
+
+                        # Ищем название
+                        title_match = re.search(r'<a href="/torrent/.*?">(.*?)</a>', row)
+                        if not title_match: continue
+                        title = title_match.group(1).replace("<b>", "").replace("</b>", "").strip()
+
+                        if any(word in title.lower() for word in ["rutor.info", "rutor.is", "правила", "путеводитель"]): 
+                            continue
+
+                        # Ищем размер
+                        size_match = re.findall(r'<td align="right">([^<]+)</td>', row)
+                        size = size_match[0] if size_match else "Неизвестно"
+
+                        # Ищем сидов
+                        seeds_match = re.search(r'<span class="green">(\d+)</span>', row)
+                        seeds = seeds_match.group(1) if seeds_match else "0"
+
+                        results.append((magnet, title, size, seeds))
+                        if len(results) >= 8: break
+
                     return results
             except Exception as e:
                 logger.error(f"Search error: {e}")
@@ -121,12 +143,20 @@ class CinemaSelectView(discord.ui.View):
         self.author = author
         
         # Динамически создаем Select и добавляем его
+        options = []
+        for i, res in enumerate(results):
+            magnet, title, size, seeds = res
+            # Обрезаем название, чтобы влезло в лимиты Discord
+            display_title = title[:90] + "..." if len(title) > 90 else title
+            options.append(discord.SelectOption(
+                label=f"🟢 Сидов: {seeds} | 💾 {size}", 
+                description=display_title, 
+                value=str(i)
+            ))
+
         select = discord.ui.Select(
-            placeholder="Выберите фильм из списка...",
-            options=[
-                discord.SelectOption(label=f"Фильм #{i+1}", description=res[1][:100], value=str(i))
-                for i, res in enumerate(results)
-            ]
+            placeholder="Выберите качество и озвучку фильма...",
+            options=options
         )
         select.callback = self.select_callback
         self.add_item(select)
@@ -136,10 +166,9 @@ class CinemaSelectView(discord.ui.View):
             return await interaction.response.send_message("Это не твое меню!", ephemeral=True)
             
         await interaction.response.defer()
-        # Значение лежит в первом элементе списка values самого селекта (мы его добавили последним)
         select_obj = self.children[0]
         idx = int(select_obj.values[0])
-        magnet, title = self.results[idx]
+        magnet, title, size, seeds = self.results[idx]
         success, info = await self.cog.add_to_torrserver(magnet)
         
         if not success:
