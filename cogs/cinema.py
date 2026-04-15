@@ -1,10 +1,12 @@
 import discord
 from discord.ext import commands
 import aiohttp
+from aiohttp import web
 import os
 import urllib.parse
 import re
 import logging
+import asyncio
 from config import COLOR_SUCCESS, COLOR_ERROR
 
 logger = logging.getLogger('Cinema')
@@ -16,6 +18,41 @@ class Cinema(commands.Cog):
         self.ts_user = os.getenv("TORRSERVER_USER", "")
         self.ts_pass = os.getenv("TORRSERVER_PASS", "")
         self.activity_id = 1493748753587376310 
+        
+        # Для Синхронизации (WebSockets)
+        self.ws_clients = set()
+        self.app = web.Application()
+        self.app.router.add_get('/ws', self.websocket_handler)
+        self.runner = web.AppRunner(self.app)
+        self.site = None
+        self.bot.loop.create_task(self.start_ws_server())
+
+    async def start_ws_server(self):
+        await self.runner.setup()
+        self.site = web.TCPSite(self.runner, '0.0.0.0', 8765)
+        await self.site.start()
+        logger.info("Cinema Sync WebSocket Server started on port 8765")
+
+    async def cog_unload(self):
+        if self.site:
+            self.bot.loop.create_task(self.runner.cleanup())
+
+    async def websocket_handler(self, request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+        self.ws_clients.add(ws)
+        try:
+            async for msg in ws:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    # Ретранслируем сообщение всем остальным участникам
+                    for client in self.ws_clients:
+                        if client != ws and not client.closed:
+                            await client.send_str(msg.data)
+        except Exception as e:
+            pass
+        finally:
+            self.ws_clients.remove(ws)
+        return ws 
 
     async def search_torrents(self, query):
         async with aiohttp.ClientSession() as session:
