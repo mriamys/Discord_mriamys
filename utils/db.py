@@ -159,4 +159,11 @@ class Database:
                 await cur.execute("SELECT * FROM users WHERE voice_memes_until > %s AND voice_memes_count < 10", (datetime.utcnow(),))
                 return await cur.fetchall()
 
+    async def get_expired_boosts(self):
+        from datetime import datetime
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT user_id FROM users WHERE xp_boost_until IS NOT NULL AND xp_boost_until <= %s", (datetime.utcnow(),))
+                return await cur.fetchall()
+
 db = Database()

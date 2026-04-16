@@ -200,7 +200,7 @@ class Economy(commands.Cog):
                 streak = 1
                 
             last_daily = datetime.utcnow() # Сохраняем в БД как UTC для целостности
-            streak_bonus = streak * 10
+            streak_bonus = min(streak * 100, 3000)
             
             if u:
                 try:

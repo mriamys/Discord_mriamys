@@ -379,7 +379,27 @@ class Leveling(commands.Cog):
             except discord.Forbidden:
                 pass
         
-        await ctx.defer() # Картинка может генерироваться пару секунд
+        is_wrong_channel = False
+        rank_channel = discord.utils.get(ctx.guild.text_channels, name="📜┃ранг")
+        if rank_channel and ctx.channel.id != rank_channel.id:
+            is_wrong_channel = True
+
+        if is_wrong_channel:
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(f"Перейди в канал {rank_channel.mention}, твой профиль сгенерирован там!", ephemeral=True)
+            else:
+                try:
+                    await ctx.message.delete()
+                except Exception:
+                    pass
+                msg = await ctx.send(f"{ctx.author.mention}, твой профиль отправлен в {rank_channel.mention}!")
+                try:
+                    import asyncio
+                    self.bot.loop.create_task(msg.delete(delay=10))
+                except Exception:
+                    pass
+        else:
+            await ctx.defer() # Картинка может генерироваться пару секунд
         
         # Получаем данные о кастомном фоне профиля (если есть)
         async with db.pool.acquire() as conn:
@@ -404,7 +424,10 @@ class Leveling(commands.Cog):
             
         file = discord.File(fp=fp, filename="profile.png")
         view = ProfileView(member)
-        await ctx.send(file=file, view=view)
+        if is_wrong_channel:
+            await rank_channel.send(content=f"{ctx.author.mention}, твой профиль:", file=file, view=view)
+        else:
+            await ctx.send(file=file, view=view)
 
     @commands.hybrid_command(name="stat", aliases=["стат", "статистика", "stats"], description="Показать детальную текстовую статистику пользователя")
     async def stat(self, ctx, member: discord.Member = None):

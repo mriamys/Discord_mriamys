@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ui import View, Button, Modal, TextInput, UserSelect
 from utils.db import db
 from config import COLOR_MAIN
@@ -293,6 +293,44 @@ class ShopView(View):
 class Shop(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.check_expired_boosts.start()
+
+    def cog_unload(self):
+        self.check_expired_boosts.cancel()
+
+    @tasks.loop(minutes=2)
+    async def check_expired_boosts(self):
+        expired = await db.get_expired_boosts()
+        if not expired:
+            return
+            
+        guild = next(iter(self.bot.guilds), None)
+        if not guild: return
+        
+        rank_channel = discord.utils.get(guild.text_channels, name="📜┃ранг")
+        if not rank_channel: return
+        
+        for row in expired:
+            user_id = row['user_id']
+            # Зануляем в базе
+            await db.update_user(user_id, xp_boost_until=None)
+            
+            # Уведомляем
+            member = guild.get_member(int(user_id))
+            if member:
+                try:
+                    embed = discord.Embed(
+                        title="⚡ Буст закончился",
+                        description="Твой буст опыта x2 подошел к концу! Загляни в магазин, если хочешь купить его снова.",
+                        color=COLOR_MAIN
+                    )
+                    await rank_channel.send(content=member.mention, embed=embed)
+                except Exception as e:
+                    logging.error(f"Не удалось отправить уведомление о бусте: {e}")
+
+    @check_expired_boosts.before_loop
+    async def before_check_expired_boosts(self):
+        await self.bot.wait_until_ready()
 
     @commands.hybrid_command(name="shop", description="Узнать свой баланс VibeКоинов")
     async def shop(self, ctx):
