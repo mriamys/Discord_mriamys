@@ -119,8 +119,8 @@ class AudioMemes(commands.Cog):
         import aiohttp
         import re
         import random
-        page = random.randint(1, 10)
-        url = f"https://www.myinstants.com/ru/search/?name=%D0%BC%D0%B5%D0%BC%D1%8B&page={page}"
+        page = random.randint(1, 30)
+        url = f"https://www.myinstants.com/ru/index/ua/?page={page}"
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers={'User-Agent': 'Mozilla/5.0'}) as resp:
