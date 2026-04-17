@@ -347,7 +347,7 @@ class Leveling(commands.Cog):
                 delta_minutes = new_minutes - old_minutes
                 
                 # Обновляем локальные переменные для отображения на картинке
-                vibecoins += (delta_minutes * 2)
+                vibecoins += (delta_minutes * 6)
                 xp += (delta_minutes * 10)
                 voice_seconds = total_voice_time
                 

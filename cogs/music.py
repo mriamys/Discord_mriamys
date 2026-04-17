@@ -56,6 +56,24 @@ class Music(commands.Cog):
         self.bot = bot
         self.queues = {} # guild_id -> list of urls
 
+    async def cog_check(self, ctx):
+        """Глобальная проверка для всех команд в этом коге."""
+        if ctx.guild is None:
+            return False
+            
+        # Проверяем название канала
+        channel_name = ctx.channel.name.lower()
+        if "музыка" not in channel_name and "music" not in channel_name:
+            # Пытаемся найти правильный канал, чтобы подсказать юзеру
+            music_channel = discord.utils.get(ctx.guild.text_channels, name="🎵┃музыка")
+            if not music_channel:
+                music_channel = discord.utils.get(ctx.guild.text_channels, name="музыка")
+            
+            hint = f" в канале {music_channel.mention}" if music_channel else ""
+            await ctx.send(f"❌ Музыкальные команды можно использовать только{hint}!", ephemeral=True)
+            return False
+        return True
+
     async def get_spotify_track_info(self, url):
         # Ленивый парсинг Spotify без API (читаем Title страницы)
         async with aiohttp.ClientSession() as session:

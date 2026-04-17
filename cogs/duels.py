@@ -20,12 +20,12 @@ def get_duel_embed():
     )
 
 class DuelAcceptView(View):
-    def __init__(self, challenger: discord.Member, target: discord.Member, bet: int, room_channel: discord.TextChannel):
+    def __init__(self, challenger: discord.Member, target: discord.Member, bet: int, thread: discord.Thread):
         super().__init__(timeout=300) # 5 минут на принятие
         self.challenger = challenger
         self.target = target
         self.bet = bet
-        self.room_channel = room_channel
+        self.thread = thread
 
     @discord.ui.button(label="Принять Вызов", style=discord.ButtonStyle.success, emoji="⚔️")
     async def btn_accept(self, interaction: discord.Interaction, button: Button):
@@ -56,7 +56,7 @@ class DuelAcceptView(View):
         await interaction.response.edit_message(content=f"⚔️ **Дуэль принята!** Битва начинается...", view=self)
 
         embed = discord.Embed(title="⚔️ ДУЭЛЬ", description="⏳ Считаем...", color=discord.Color.orange())
-        msg = await self.room_channel.send(content=f"{self.challenger.mention} 🆚 {self.target.mention}", embed=embed)
+        msg = await self.thread.send(content=f"{self.challenger.mention} 🆚 {self.target.mention}", embed=embed)
 
         # Анимация битвы (перебор цифр)
         for _ in range(3):
@@ -95,6 +95,14 @@ class DuelAcceptView(View):
         
         self.target.client.dispatch("duel_won", winner, duels_won)
 
+        # Ресенд меню дуэлей в конце дуэли
+        if self.thread.name.startswith("⚔️┃дуэль-"):
+            try:
+                embed_menu = get_duel_embed()
+                await self.thread.send(content=self.challenger.mention, embed=embed_menu, view=DuelRoomView(self.challenger.id))
+            except:
+                pass
+
     @discord.ui.button(label="Отклонить", style=discord.ButtonStyle.secondary, emoji="✖️")
     async def btn_decline(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.target.id and interaction.user.id != self.challenger.id:
@@ -108,6 +116,14 @@ class DuelAcceptView(View):
             await interaction.response.edit_message(content=f"Отменено: {self.target.display_name} испугался.", view=self)
         else:
             await interaction.response.edit_message(content=f"Отменено: {self.challenger.display_name} передумал.", view=self)
+
+        # Ресенд меню дуэлей при отклонении
+        if interaction.channel.name.startswith("⚔️┃дуэль-"):
+            try:
+                embed_menu = get_duel_embed()
+                await interaction.channel.send(content=self.challenger.mention, embed=embed_menu, view=DuelRoomView(self.challenger.id))
+            except:
+                pass
 
 
 class DuelBetModal(Modal):
@@ -150,12 +166,10 @@ class DuelBetModal(Modal):
             view=DuelAcceptView(self.challenger, self.target, bet, interaction.channel)
         )
 
-        # Переотправляем меню вниз
+        # Удаляем старое меню, но новое отправим только после результата дуэли или отклонения
         if interaction.message and interaction.channel.name.startswith("⚔️┃дуэль-"):
             try:
                 await interaction.message.delete()
-                embed = get_duel_embed()
-                await interaction.channel.send(content=self.challenger.mention, embed=embed, view=DuelRoomView(self.challenger.id))
             except:
                 pass
 
@@ -170,7 +184,7 @@ class DuelRoomView(View):
         if self.author_id:
             aid = int(self.author_id)
         else:
-            # Пытаемся достать из названия канала
+            # Пытаемся достать из названия ветки
             if "┃дуэль-" in interaction.channel.name:
                 parts = interaction.channel.name.split("-")
                 if len(parts) >= 2:
@@ -192,9 +206,9 @@ class DuelRoomView(View):
             await interaction.response.send_message("❌ С собой играть скучно. Выбери кого-то другого.", ephemeral=True)
             return
 
-        # Даем права цели в этот канал
+        # Добавляем цель в приватную ветку
         try:
-            await interaction.channel.set_permissions(target, read_messages=True, send_messages=True)
+            await interaction.channel.add_user(target)
         except:
             pass
 
@@ -227,7 +241,7 @@ class DuelRoomView(View):
         await interaction.response.send_message("🚪 Закрываю комнату...")
         await asyncio.sleep(2)
         try:
-            await interaction.channel.delete(reason="Игрок закрыл дуэльную комнату")
+            await interaction.channel.delete()
         except:
             pass
 
@@ -238,50 +252,33 @@ class Duels(commands.Cog):
     @commands.Cog.listener()
     async def on_create_duel_room(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        guild = interaction.guild
-        channel_name = f"⚔️┃дуэль-{interaction.user.name[:10]}-{interaction.user.id}"
-        
-        existing = None
-        for ch in guild.text_channels:
-            if "┃дуэль-" in ch.name and str(interaction.user.id) in ch.name:
-                existing = ch
-                break
-        
-        if existing:
-            await interaction.followup.send(f"У тебя уже открыта комната: {existing.mention}", ephemeral=True)
-            return
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=True, send_messages=False, add_reactions=False),
-            interaction.user:   discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me:           discord.PermissionOverwrite(read_messages=True, send_messages=True),
-        }
+        channel = interaction.channel
+        thread_name = f"⚔️┃дуэль-{interaction.user.name[:10]}-{interaction.user.id}"
         
         try:
-            channel = await guild.create_text_channel(
-                channel_name,
-                overwrites=overwrites,
-                category=interaction.channel.category,
-                topic=f"🥷 Публичная арена для дуэлей"
+            thread = await channel.create_thread(
+                name=thread_name,
+                type=discord.ChannelType.private_thread,
+                auto_archive_duration=60
             )
+            await thread.add_user(interaction.user)
         except discord.Forbidden:
-            await interaction.followup.send("❌ У бота нет прав для создания приватного канала.", ephemeral=True)
+            await interaction.followup.send("❌ У бота нет прав на создание приватных веток.", ephemeral=True)
+            return
+        except Exception as e:
+            await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
             return
 
-        await interaction.followup.send(f"✅ Комната создана: {channel.mention}", ephemeral=True)
+        await interaction.followup.send(f"✅ Комната создана в ветке: {thread.mention}", ephemeral=True)
         
         embed = get_duel_embed()
-        
-        await channel.send(content=interaction.user.mention, embed=embed, view=DuelRoomView(interaction.user.id))
+        await thread.send(content=interaction.user.mention, embed=embed, view=DuelRoomView(interaction.user.id))
 
-        async def _delete_channel():
+        async def _delete_thread():
             await asyncio.sleep(1800)
-            try:
-                await channel.delete(reason="Время дуэльной комнаты вышло")
-            except:
-                pass
-        self.bot.loop.create_task(_delete_channel())
+            try: await thread.delete()
+            except: pass
+        self.bot.loop.create_task(_delete_thread())
 
 async def setup(bot):
     await bot.add_cog(Duels(bot))

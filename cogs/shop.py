@@ -192,32 +192,28 @@ class ShopView(View):
 
     async def _casino_callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        # Проверяем не создан ли уже канал
-        guild = interaction.guild
-        channel_name = f"🎰┃казино-{interaction.user.name[:10]}"
-        existing = discord.utils.get(guild.channels, name=channel_name.lower())
-        if existing:
-            await interaction.followup.send(f"У тебя уже есть открытый стол: {existing.mention}", ephemeral=True)
-            return
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user:   discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me:           discord.PermissionOverwrite(read_messages=True, send_messages=True),
-        }
+        # Проверяем не создана ли уже ветка
+        channel = interaction.channel
+        thread_name = f"🎰┃казино-{interaction.user.name[:10]}"
+        
+        # В дискорде нельзя просто найти ветку по имени через utils.get если она приватная и мы не в ней
+        # Но мы можем попробовать создать, а если не выйдет - сообщить
         
         try:
-            channel = await guild.create_text_channel(
-                channel_name,
-                overwrites=overwrites,
-                category=interaction.channel.category,
-                topic=f"Личный казино-стол для {interaction.user.display_name} 🎰"
+            thread = await channel.create_thread(
+                name=thread_name,
+                type=discord.ChannelType.private_thread,
+                auto_archive_duration=60 # Архив через час неактивности
             )
+            await thread.add_user(interaction.user)
         except discord.Forbidden:
-            await interaction.followup.send("❌ У бота нет прав для создания приватного канала.", ephemeral=True)
+            await interaction.followup.send("❌ У бота нет прав на создание приватных веток в этом канале.", ephemeral=True)
+            return
+        except Exception as e:
+            await interaction.followup.send(f"❌ Ошибка при создании ветки: {e}", ephemeral=True)
             return
 
-        await interaction.followup.send(f"✅ Твой личный стол накрыт: {channel.mention}", ephemeral=True)
+        await interaction.followup.send(f"✅ Твой личный стол накрыт в ветке: {thread.mention}", ephemeral=True)
         
         embed = discord.Embed(
             title=f"🎰 Личный стол: {interaction.user.display_name}",
@@ -231,8 +227,14 @@ class ShopView(View):
             color=0xF1C40F
         )
         embed.set_image(url="https://media.giphy.com/media/3ohzdFmHSiRBbhzaE8/giphy.gif")
-        await channel.send(content=interaction.user.mention, embed=embed, view=CasinoView())
-        asyncio.create_task(_delete_channel(channel, 1800))
+        await thread.send(content=interaction.user.mention, embed=embed, view=CasinoView())
+        
+        # Автоудаление (удаление веток тоже работает)
+        async def _del_thread():
+            await asyncio.sleep(1800)
+            try: await thread.delete()
+            except: pass
+        asyncio.create_task(_del_thread())
 
     def _make_callback(self, item_id: str):
         async def callback(interaction: discord.Interaction):
@@ -249,6 +251,16 @@ class ShopView(View):
                 await interaction.response.send_modal(FakeStatusModal(user_data))
 
             elif item_id == "xp_boost":
+                # Проверка на уже имеющийся активный буст
+                now = datetime.utcnow()
+                boost_until = user_data.get('xp_boost_until')
+                if boost_until:
+                    if isinstance(boost_until, str):
+                        boost_until = datetime.strptime(str(boost_until).split('.')[0], '%Y-%m-%d %H:%M:%S')
+                    if boost_until > now:
+                        await interaction.response.send_message("❌ У тебя уже есть активный **Буст опыта**! Дождись его окончания.", ephemeral=True)
+                        return
+
                 new_balance = await deduct(interaction, "xp_boost", user_data)
                 until = datetime.utcnow() + timedelta(hours=2)
                 await db.update_user(str(interaction.user.id), xp_boost_until=until)

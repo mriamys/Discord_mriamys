@@ -101,8 +101,13 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     background.text((start_x, 160), "УР.", font=font_small, color="#aaaaaa")
     background.text((start_x + 30, 150), str(level), font=font_level, color="#ffffff")
 
+    current_level_xp = (level / 0.023) ** 2
     next_level_xp = ((level + 1) / 0.023) ** 2
-    percentage = min(max((xp / next_level_xp) * 100, 0), 100) if next_level_xp > 0 else 0
+    
+    xp_in_level = max(xp - current_level_xp, 0)
+    xp_needed_for_next = next_level_xp - current_level_xp
+    
+    percentage = min(max((xp_in_level / xp_needed_for_next) * 100, 0), 100) if xp_needed_for_next > 0 else 0
     
     xp_text = f"{int(xp)} / {int(next_level_xp)} XP"
     background.text((840, 155), xp_text, font=font_text, color="#ffffff", align="right")

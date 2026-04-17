@@ -147,14 +147,13 @@ class SlotsModal(discord.ui.Modal):
 
             embed = discord.Embed(title="🎰 Слоты", description="[ 🎰 ] КРУТИМ БАРАБАНЫ [ 🎰 ]", color=discord.Color.blue())
             
-            if interaction.message and "казино-" in interaction.channel.name:
+            is_casino_channel = interaction.message and "казино-" in interaction.channel.name
+            
+            if is_casino_channel:
                 await interaction.response.send_message(embed=embed)
                 try: await interaction.message.delete()
                 except: pass
-                
                 msg = await interaction.original_response()
-                menu_embed = get_casino_embed(interaction.user.display_name)
-                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
             else:
                 await interaction.response.send_message(embed=embed)
                 msg = await interaction.original_response()
@@ -178,6 +177,11 @@ class SlotsModal(discord.ui.Modal):
             embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
             try: await msg.edit(embed=embed)
             except: pass
+
+            # Ресенд меню стола в самом конце
+            if is_casino_channel:
+                menu_embed = get_casino_embed(interaction.user.display_name)
+                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
 
         except Exception as e:
             print(f"[CASINO ERROR] SlotsModal: {e}")
@@ -208,13 +212,13 @@ class CoinModal(Modal):
 
             embed = discord.Embed(title="🪙 Монетка", description="⏳ Монетка летит...", color=discord.Color.blue())
             
-            if interaction.message and "казино-" in interaction.channel.name:
+            is_casino_channel = interaction.message and "казино-" in interaction.channel.name
+            
+            if is_casino_channel:
                 await interaction.response.send_message(embed=embed)
                 try: await interaction.message.delete()
                 except: pass
                 msg = await interaction.original_response()
-                menu_embed = get_casino_embed(interaction.user.display_name)
-                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
             else:
                 await interaction.response.send_message(embed=embed)
                 msg = await interaction.original_response()
@@ -237,6 +241,11 @@ class CoinModal(Modal):
             
             try: await msg.edit(embed=embed)
             except: pass
+
+            # Ресенд меню стола
+            if is_casino_channel:
+                menu_embed = get_casino_embed(interaction.user.display_name)
+                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
 
         except Exception as e:
             print(f"[CASINO ERROR] CoinModal: {e}")
@@ -267,13 +276,13 @@ class DiceModal(Modal):
 
             embed = discord.Embed(title=f"🎲 Кости (ставка на {self.guess})", description="⏳ Кости трясутся...", color=discord.Color.blue())
 
-            if interaction.message and "казино-" in interaction.channel.name:
+            is_casino_channel = interaction.message and "казино-" in interaction.channel.name
+
+            if is_casino_channel:
                 await interaction.response.send_message(embed=embed)
                 try: await interaction.message.delete()
                 except: pass
                 msg = await interaction.original_response()
-                menu_embed = get_casino_embed(interaction.user.display_name)
-                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
             else:
                 await interaction.response.send_message(embed=embed)
                 msg = await interaction.original_response()
@@ -296,6 +305,11 @@ class DiceModal(Modal):
 
             try: await msg.edit(embed=embed)
             except: pass
+
+            # Ресенд меню стола
+            if is_casino_channel:
+                menu_embed = get_casino_embed(interaction.user.display_name)
+                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
 
         except Exception as e:
             print(f"[CASINO ERROR] DiceModal: {e}")

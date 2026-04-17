@@ -219,7 +219,7 @@ class Economy(commands.Cog):
             if xp_boost_until > datetime.utcnow():
                 xp_multiplier = 2
                 
-        new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 4) + streak_bonus
+        new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 6) + streak_bonus
         new_xp = user_data.get('xp', 0) + (delta_minutes * 10 * xp_multiplier)
         
         await db.update_user(user_id, 

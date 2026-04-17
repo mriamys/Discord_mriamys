@@ -39,8 +39,8 @@ class CaseView(View):
         # Если вью персистентная (из setup_hook), берем ID из автора взаимодействия
         uid = self.user_id if self.user_id else str(interaction.user.id)
         
-        # Простая проверка: если это личный канал игрока, позволяем играть только ему
-        if "┃кейс-" in interaction.channel.name:
+        # В ветках проверка по названию
+        if hasattr(interaction.channel, 'parent') and "┃кейс-" in interaction.channel.name:
             if str(interaction.user.id) not in interaction.channel.name:
                 await interaction.response.send_message("Это не твой кейс!", ephemeral=True)
                 return
@@ -84,14 +84,13 @@ class CaseView(View):
         # Отправляем начальное сообщение с анимацией
         embed = discord.Embed(title=f"{emoji} Открытие {case_name}...", description="[ 🎰 ] КРУТИМ РУЛЕТКУ [ 🎰 ]", color=discord.Color.blue())
         
-        if interaction.message and "┃кейс-" in interaction.channel.name:
+        is_case_channel = interaction.message and "┃кейс-" in interaction.channel.name
+        
+        if is_case_channel:
             await interaction.response.send_message(embed=embed)
             try: await interaction.message.delete()
             except: pass
-            
             msg = await interaction.original_response()
-            menu_embed = get_case_embed()
-            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CaseView(uid))
         else:
             await interaction.response.send_message(embed=embed)
             msg = await interaction.original_response()
@@ -101,7 +100,7 @@ class CaseView(View):
         
         for step_val in steps:
             await asyncio.sleep(0.4)
-            embed.description = f"**[  {step_val:04d} 🪙  ]**"
+            embed.description = f"**[  {step_val:04d}  ]**"
             try:
                 await msg.edit(embed=embed)
             except discord.HTTPException:
@@ -123,6 +122,11 @@ class CaseView(View):
             await msg.edit(embed=embed)
         except:
             pass
+
+        # Ресенд меню кейсов
+        if is_case_channel:
+            menu_embed = get_case_embed()
+            await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CaseView(uid))
 
     @discord.ui.button(label="Дерево (100 🪙)", style=discord.ButtonStyle.secondary, emoji="🪵", row=0, custom_id="case_wood")
     async def btn_wooden(self, interaction: discord.Interaction, button: Button):
@@ -193,52 +197,34 @@ class Cases(commands.Cog):
     @commands.Cog.listener()
     async def on_create_vibe_case_room(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        guild = interaction.guild
-        # В название канала добавляем ID для точной проверки
-        channel_name = f"📦┃кейс-{interaction.user.name[:10]}-{interaction.user.id}"
-        
-        # Ищем канал по ID в названии
-        existing = None
-        for ch in guild.text_channels:
-            if "┃кейс-" in ch.name and str(interaction.user.id) in ch.name:
-                existing = ch
-                break
-        
-        if existing:
-            await interaction.followup.send(f"У тебя уже открыта комната: {existing.mention}", ephemeral=True)
-            return
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user:   discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me:           discord.PermissionOverwrite(read_messages=True, send_messages=True),
-        }
+        channel = interaction.channel
+        thread_name = f"📦┃кейс-{interaction.user.name[:10]}-{interaction.user.id}"
         
         try:
-            channel = await guild.create_text_channel(
-                channel_name,
-                overwrites=overwrites,
-                category=interaction.channel.category,
-                topic=f"Личная комната для открытия Vibe Кейсов 📦"
+            thread = await channel.create_thread(
+                name=thread_name,
+                type=discord.ChannelType.private_thread,
+                auto_archive_duration=60
             )
+            await thread.add_user(interaction.user)
         except discord.Forbidden:
-            await interaction.followup.send("❌ У бота нет прав для создания приватного канала.", ephemeral=True)
+            await interaction.followup.send("❌ У бота нет прав на создание приватных веток.", ephemeral=True)
+            return
+        except Exception as e:
+            await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
             return
 
-        await interaction.followup.send(f"✅ Комната создана: {channel.mention}", ephemeral=True)
+        await interaction.followup.send(f"✅ Комната создана в ветке: {thread.mention}", ephemeral=True)
         
         embed = get_case_embed()
-        
-        await channel.send(content=interaction.user.mention, embed=embed, view=CaseView(str(interaction.user.id)))
+        await thread.send(content=interaction.user.mention, embed=embed, view=CaseView(str(interaction.user.id)))
 
-        # Автоудаление комнаты через час
-        async def _delete_channel():
+        # Автоудаление
+        async def _delete_thread():
             await asyncio.sleep(1800)
-            try:
-                await channel.delete(reason="Время комнаты вышло")
-            except:
-                pass
-        self.bot.loop.create_task(_delete_channel())
+            try: await thread.delete()
+            except: pass
+        self.bot.loop.create_task(_delete_thread())
 
 async def setup(bot):
     await bot.add_cog(Cases(bot))
