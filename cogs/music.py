@@ -56,15 +56,10 @@ class Music(commands.Cog):
         self.bot = bot
         self.queues = {} # guild_id -> list of urls
 
-    async def cog_check(self, ctx):
-        """Глобальная проверка для всех команд в этом коге."""
-        if ctx.guild is None:
-            return False
-            
-        # Проверяем название канала
+    async def check_channel(self, ctx):
+        """Вспомогательная проверка канала."""
         channel_name = ctx.channel.name.lower()
         if "музыка" not in channel_name and "music" not in channel_name:
-            # Пытаемся найти правильный канал, чтобы подсказать юзеру
             music_channel = discord.utils.get(ctx.guild.text_channels, name="🎵┃музыка")
             if not music_channel:
                 music_channel = discord.utils.get(ctx.guild.text_channels, name="музыка")
@@ -92,6 +87,9 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(name="play", description="Воспроизвести музыку (YouTube/Spotify/Название)")
     async def play(self, ctx, *, search: str):
+        if not await self.check_channel(ctx):
+            return
+
         if not getattr(ctx.author, 'voice', None):
             await ctx.send(embed=discord.Embed(description="❌ Ты должен быть в голосовом канале!", color=COLOR_ERROR))
             return
@@ -155,6 +153,9 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(name="skip", description="Пропустить текущий трек")
     async def skip(self, ctx):
+        if not await self.check_channel(ctx):
+            return
+
         await ctx.defer()
         if ctx.voice_client and ctx.voice_client.is_playing():
             ctx.voice_client.stop()
@@ -162,6 +163,9 @@ class Music(commands.Cog):
             
     @commands.hybrid_command(name="stop", description="Остановить музыку и выгнать бота")
     async def stop(self, ctx):
+        if not await self.check_channel(ctx):
+            return
+
         await ctx.defer()
         if ctx.voice_client:
             self.queues[ctx.guild.id] = []

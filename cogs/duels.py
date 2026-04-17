@@ -93,15 +93,15 @@ class DuelAcceptView(View):
         duels_won = win_data.get('duels_won', 0) + 1
         await db.update_user(str(winner.id), vibecoins=win_data.get('vibecoins', 0) + bank, duels_won=duels_won)
         
-        self.target.client.dispatch("duel_won", winner, duels_won)
+        # Исправлено: используем interaction.client вместо self.target.client
+        interaction.client.dispatch("duel_won", winner, duels_won)
 
         # Ресенд меню дуэлей в конце дуэли
-        if self.thread.name.startswith("⚔️┃дуэль-"):
-            try:
-                embed_menu = get_duel_embed()
-                await self.thread.send(content=self.challenger.mention, embed=embed_menu, view=DuelRoomView(self.challenger.id))
-            except:
-                pass
+        try:
+            embed_menu = get_duel_embed()
+            await self.thread.send(content=self.challenger.mention, embed=embed_menu, view=DuelRoomView(self.challenger.id))
+        except Exception as e:
+            logging.error(f"Error resending duel menu: {e}")
 
     @discord.ui.button(label="Отклонить", style=discord.ButtonStyle.secondary, emoji="✖️")
     async def btn_decline(self, interaction: discord.Interaction, button: Button):
@@ -118,12 +118,11 @@ class DuelAcceptView(View):
             await interaction.response.edit_message(content=f"Отменено: {self.challenger.display_name} передумал.", view=self)
 
         # Ресенд меню дуэлей при отклонении
-        if interaction.channel.name.startswith("⚔️┃дуэль-"):
-            try:
-                embed_menu = get_duel_embed()
-                await interaction.channel.send(content=self.challenger.mention, embed=embed_menu, view=DuelRoomView(self.challenger.id))
-            except:
-                pass
+        try:
+            embed_menu = get_duel_embed()
+            await interaction.channel.send(content=self.challenger.mention, embed=embed_menu, view=DuelRoomView(self.challenger.id))
+        except:
+            pass
 
 
 class DuelBetModal(Modal):
@@ -166,8 +165,8 @@ class DuelBetModal(Modal):
             view=DuelAcceptView(self.challenger, self.target, bet, interaction.channel)
         )
 
-        # Удаляем старое меню, но новое отправим только после результата дуэли или отклонения
-        if interaction.message and interaction.channel.name.startswith("⚔️┃дуэль-"):
+        # Удаляем старое меню
+        if interaction.message:
             try:
                 await interaction.message.delete()
             except:
@@ -180,18 +179,7 @@ class DuelRoomView(View):
 
     @discord.ui.select(cls=UserSelect, placeholder="Кого вызываешь на дуэль?", min_values=1, max_values=1, custom_id="duel_user_select")
     async def select_target(self, interaction: discord.Interaction, select: UserSelect):
-        aid = None
-        if self.author_id:
-            aid = int(self.author_id)
-        else:
-            # Пытаемся достать из названия ветки
-            if "┃дуэль-" in interaction.channel.name:
-                parts = interaction.channel.name.split("-")
-                if len(parts) >= 2:
-                    try: aid = int(parts[-1])
-                    except: pass
-        
-        if not aid: aid = interaction.user.id # fallback
+        aid = int(self.author_id) if self.author_id else interaction.user.id
 
         if interaction.user.id != aid:
             await interaction.response.send_message("❌ Только инициатор комнаты может выбирать соперника.", ephemeral=True)
@@ -222,17 +210,7 @@ class DuelRoomView(View):
 
     @discord.ui.button(label="Выйти и удалить комнату", style=discord.ButtonStyle.danger, emoji="🚪", row=1, custom_id="duel_room_exit")
     async def btn_close(self, interaction: discord.Interaction, button: Button):
-        aid = None
-        if self.author_id:
-            aid = int(self.author_id)
-        else:
-            if "┃дуэль-" in interaction.channel.name:
-                parts = interaction.channel.name.split("-")
-                if len(parts) >= 2:
-                    try: aid = int(parts[-1])
-                    except: pass
-        
-        if not aid: aid = interaction.user.id
+        aid = int(self.author_id) if self.author_id else interaction.user.id
 
         if interaction.user.id != aid and not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Только владелец комнаты или админ может её закрыть.", ephemeral=True)
@@ -253,7 +231,7 @@ class Duels(commands.Cog):
     async def on_create_duel_room(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         channel = interaction.channel
-        thread_name = f"⚔️┃дуэль-{interaction.user.name[:10]}-{interaction.user.id}"
+        thread_name = f"⚔️┃дуэль-{interaction.user.name[:15]}"
         
         try:
             thread = await channel.create_thread(
