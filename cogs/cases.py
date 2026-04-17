@@ -36,18 +36,15 @@ class CaseView(View):
         self.user_id = user_id
 
     async def _handle_case(self, interaction: discord.Interaction, price: int, min_val: int, max_val: int, case_name: str, emoji: str):
-        # Если вью персистентная (из setup_hook), берем ID из автора взаимодействия
-        uid = self.user_id if self.user_id else str(interaction.user.id)
+        # Если user_id не задан (например, в общем канале), владельцем считается тот, кто вызвал команду
+        owner_id = self.user_id if self.user_id else str(interaction.user.id)
         
-        # В ветках проверка по названию
-        if hasattr(interaction.channel, 'parent') and "┃кейс-" in interaction.channel.name:
-            if str(interaction.user.id) not in interaction.channel.name:
-                await interaction.response.send_message("Это не твой кейс!", ephemeral=True)
-                return
-        elif self.user_id and str(interaction.user.id) != self.user_id:
-            await interaction.response.send_message("Это не твой кейс!", ephemeral=True)
+        # Проверка владельца: только тот, кто открыл комнату, может крутить кейсы
+        if str(interaction.user.id) != owner_id:
+            await interaction.response.send_message("❌ Это не твой кейс! Открой свой через команду.", ephemeral=True)
             return
         
+        uid = owner_id
         user_data = await db.get_user(uid)
         balance = user_data.get('vibecoins', 0)
 
