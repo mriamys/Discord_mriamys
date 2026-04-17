@@ -186,7 +186,7 @@ class CaseView(View):
         await interaction.response.send_message("🚪 Закрываю комнату...")
         await asyncio.sleep(2)
         try:
-            await interaction.channel.delete(reason="Игрок вышел из комнаты кейсов")
+            await interaction.channel.delete()
         except:
             pass
 
@@ -198,7 +198,7 @@ class Cases(commands.Cog):
     async def on_create_vibe_case_room(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         channel = interaction.channel
-        thread_name = f"📦┃кейс-{interaction.user.name[:10]}-{interaction.user.id}"
+        thread_name = f"📦┃кейс-{interaction.user.name[:15]}"
         
         try:
             thread = await channel.create_thread(
@@ -207,6 +207,8 @@ class Cases(commands.Cog):
                 auto_archive_duration=60
             )
             await thread.add_user(interaction.user)
+            if interaction.guild.owner:
+                await thread.add_user(interaction.guild.owner)
         except discord.Forbidden:
             await interaction.followup.send("❌ У бота нет прав на создание приватных веток.", ephemeral=True)
             return
@@ -219,7 +221,6 @@ class Cases(commands.Cog):
         embed = get_case_embed()
         await thread.send(content=interaction.user.mention, embed=embed, view=CaseView(str(interaction.user.id)))
 
-        # Автоудаление
         async def _delete_thread():
             await asyncio.sleep(1800)
             try: await thread.delete()

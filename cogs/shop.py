@@ -206,6 +206,9 @@ class ShopView(View):
                 auto_archive_duration=60 # Архив через час неактивности
             )
             await thread.add_user(interaction.user)
+            # Добавляем владельца сервера, чтобы он видел ветку
+            if interaction.guild.owner:
+                await thread.add_user(interaction.guild.owner)
         except discord.Forbidden:
             await interaction.followup.send("❌ У бота нет прав на создание приватных веток в этом канале.", ephemeral=True)
             return
