@@ -140,7 +140,14 @@ class ShopView(View):
         thread = await interaction.channel.create_thread(name=f"🃏┃блэкджек-{interaction.user.name[:10]}", type=discord.ChannelType.private_thread)
         await thread.add_user(interaction.user)
         from cogs.blackjack import BlackjackRoomView
-        embed = discord.Embed(title="🃏 БЛЭКДЖЕК", description="Выбирай режим игры:", color=COLOR_MAIN)
+        desc = (
+            "**Правила игры:**\n"
+            "Набери больше очков, чем у дилера, но не более **21**.\n"
+            "🔹 **Туз:** 1 или 11 очков. 🔹 **Картинки:** 10 очков.\n"
+            "🤖 Дилер всегда берет карты до 17 очков.\n\n"
+            "Выбирай режим игры ниже:"
+        )
+        embed = discord.Embed(title="🃏 БЛЭКДЖЕК", description=desc, color=COLOR_MAIN)
         await thread.send(embed=embed, view=BlackjackRoomView(interaction.client))
         await interaction.followup.send(f"✅ Твой игровой стол: {thread.mention}", ephemeral=True)
 
@@ -150,7 +157,13 @@ class ShopView(View):
         thread = await interaction.channel.create_thread(name=f"💡┃викторина-{interaction.user.name[:10]}", type=discord.ChannelType.private_thread)
         await thread.add_user(interaction.user)
         from cogs.quiz import QuizRoomView
-        embed = discord.Embed(title="💡 ВИКТОРИНА", description="Выбирай режим игры:", color=COLOR_MAIN)
+        desc = (
+            "**Правила Викторины:**\n"
+            "🔹 **Соло:** Один случайный вопрос. Награда от **300 до 600 🪙**.\n"
+            "🔹 **Сыграть с другом:** Вы видите один вопрос. **Кто первый** правильно нажмет — забирает весь банк!\n\n"
+            "Выбирай режим игры ниже:"
+        )
+        embed = discord.Embed(title="💡 ВИКТОРИНА", description=desc, color=COLOR_MAIN)
         await thread.send(embed=embed, view=QuizRoomView(interaction.client))
         await interaction.followup.send(f"✅ Игровая комната: {thread.mention}", ephemeral=True)
 

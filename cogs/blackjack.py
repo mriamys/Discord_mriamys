@@ -148,7 +148,14 @@ class BlackjackView(View):
         await interaction.response.edit_message(embed=self.create_embed(), view=self)
 
         # Ресенд меню румы
-        await interaction.channel.send(content=self.member.mention, embed=discord.Embed(title="🃏 БЛЭКДЖЕК", description="Выбирай режим игры:", color=0x2ECC71), view=BlackjackRoomView(self.bot))
+        desc = (
+            "**Правила игры:**\n"
+            "Набери больше очков, чем у дилера, но не более **21**.\n"
+            "🔹 **Туз:** 1 или 11 очков. 🔹 **Картинки:** 10 очков.\n"
+            "🤖 Дилер всегда берет карты до 17 очков.\n\n"
+            "Выбирай режим игры ниже:"
+        )
+        await interaction.channel.send(content=self.member.mention, embed=discord.Embed(title="🃏 БЛЭКДЖЕК", description=desc, color=0x2ECC71), view=BlackjackRoomView(self.bot))
 
 # ─── ДУЭЛЬ ────────────────────────────────────────────────────────────────────
 
@@ -276,23 +283,10 @@ class BlackjackRoomView(View):
         except:
             pass
 
-    @discord.ui.button(label="⚔️ Вызвать игрока", style=discord.ButtonStyle.success, custom_id="bj_room_duel")
+    @discord.ui.button(label="⚔️ Сыграть с другом (500 🪙)", style=discord.ButtonStyle.success, custom_id="bj_room_duel")
     async def invite(self, interaction: discord.Interaction, button: Button):
         from cogs.shop import GameDuelSelectView
         await interaction.response.send_message("🃏 Выбери оппонента для дуэли (ставка 500):", view=GameDuelSelectView(self.bot, interaction.user, 500, "bj"), ephemeral=True)
-
-    @discord.ui.button(label="📜 Правила", style=discord.ButtonStyle.secondary, custom_id="bj_room_rules")
-    async def rules(self, interaction: discord.Interaction, button: Button):
-        rules_text = (
-            "**Цель игры:** Набрать больше очков, чем у дилера, но не более **21**.\n\n"
-            "🔹 **Туз (Ace):** 1 или 11 очков (выбирается автоматически в вашу пользу).\n"
-            "🔹 **Картинки (J, Q, K):** 10 очков.\n"
-            "🔹 **Числа:** по своему номиналу.\n\n"
-            "📜 **Ход игры:** Вы получаете 2 карты. Вы можете 'Взять' (Hit) еще или 'Стоп' (Stand).\n"
-            "🧨 Если у вас больше 21 — это **перебор**, вы проигрываете сразу.\n"
-            "🤖 Дилер обязан брать карты, пока у него меньше 17 очков."
-        )
-        await interaction.response.send_message(rules_text, ephemeral=True)
 
     @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.danger, custom_id="bj_room_exit")
     async def exit(self, interaction: discord.Interaction, button: Button):
@@ -304,6 +298,7 @@ class BlackjackRoomView(View):
 class Blackjack(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.bot.add_view(BlackjackRoomView(bot))
 
 async def setup(bot):
     await bot.add_cog(Blackjack(bot))
