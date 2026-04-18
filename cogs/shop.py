@@ -21,7 +21,7 @@ class GameDuelInviteView(View):
         super().__init__(timeout=300)
         self.bot, self.challenger_id, self.target_id, self.bet, self.game_type = bot, challenger_id, target_id, bet, game_type
 
-    @discord.ui.button(label="Принять Вызов", style=discord.ButtonStyle.success, emoji="⚔️", custom_id="duel_accept_v3")
+    @discord.ui.button(label="Принять Вызов", style=discord.ButtonStyle.success, emoji="⚔️")
     async def btn_accept(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.target_id:
             await interaction.response.send_message("❌ Этот вызов не для тебя!", ephemeral=True); return
@@ -44,21 +44,28 @@ class GameDuelInviteView(View):
         else:
             from cogs.quiz import fetch_question, QuizDuelView
             q = await fetch_question()
+            if not q:
+                await interaction.followup.send("❌ Ошибка получения вопроса.")
+                return
             view = QuizDuelView(self.bot, challenger, interaction.user, self.bet, q)
-            await interaction.channel.send(content=f"⚔️ **БИТВА ЗНАТОКОВ!**\n💡 **ВОПРОС:** {q['q']}", view=view)
+            msg = await interaction.channel.send(content=f"{challenger.mention} 🆚 {interaction.user.mention}", embed=view.create_embed(), view=view)
+            view.message = msg
 
 class GameDuelSelectUser(UserSelect):
     def __init__(self, bot, challenger_id, bet, game_type):
-        super().__init__(placeholder="Выбери оппонента...", min_values=1, max_values=1, custom_id="duel_select_v3")
+        super().__init__(placeholder="Выбери оппонента...", min_values=1, max_values=1)
         self.bot, self.challenger_id, self.bet, self.game_type = bot, challenger_id, bet, game_type
     async def callback(self, interaction: discord.Interaction):
         target = self.values[0]
         if target.bot or target.id == self.challenger_id:
             await interaction.response.send_message("❌ Недопустимая цель!", ephemeral=True); return
+            
+        await interaction.response.defer()
         try: await interaction.channel.add_user(target)
         except: pass
+        
         view = GameDuelInviteView(self.bot, self.challenger_id, target.id, self.bet, self.game_type)
-        await interaction.response.send_message(content=f"⚔️ <@{self.challenger_id}> вызывает {target.mention} на дуэль!", view=view)
+        await interaction.channel.send(content=f"⚔️ <@{self.challenger_id}> вызывает {target.mention} на дуэль!", view=view)
 
 class GameDuelSelectView(View):
     def __init__(self, bot, challenger_id, bet, game_type):
