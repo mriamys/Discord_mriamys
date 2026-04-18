@@ -64,12 +64,16 @@ class QuizButton(Button):
             correct_count = user_data.get('quiz_correct', 0) + 1
             await db.update_user(str(view.member.id), vibecoins=user_data.get('vibecoins', 0) + reward, quiz_correct=correct_count)
             view.bot.dispatch("quiz_answered", view.member, True, correct_count)
+            
             await interaction.response.edit_message(content=f"✅ **Правильно!** Это был `{view.q['a']}`.\nТы получил **{reward} 🪙**", view=view)
         else:
             user_data = await db.get_user(str(view.member.id))
             correct_count = user_data.get('quiz_correct', 0)
             view.bot.dispatch("quiz_answered", view.member, False, correct_count)
             await interaction.response.edit_message(content=f"❌ **Неверно!** Правильный ответ: `{view.q['a']}`.", view=view)
+
+        # Ресенд меню после ответа
+        await interaction.channel.send(content=view.member.mention, embed=discord.Embed(title="💡 ВИКТОРИНА", description="Выбирай режим игры:", color=0x2ECC71), view=QuizRoomView(view.bot))
 
 # ─── ДУЭЛЬ ВИКТОРИНА ──────────────────────────────────────────────────────────
 
@@ -114,11 +118,11 @@ class QuizDuelButton(Button):
                 content=f"🏆 **{view.winner.mention} ответил ПЕРВЫМ и забирает {view.bet * 2} 🪙!**\nПравильный ответ: `{view.q['a']}`",
                 view=view
             )
+            # Ресенд меню в конце дуэли
+            await interaction.channel.send(embed=discord.Embed(title="💡 ВИКТОРИНА", description="Выбирай режим игры:", color=0x2ECC71), view=QuizRoomView(view.bot))
         else:
             # Игрок ошибся — он выбывает из этого раунда
             await interaction.response.send_message("❌ Неверно! Ты больше не можешь отвечать в этой дуэли.", ephemeral=True)
-            # Если оба ошиблись — ничья
-            # Для простоты: просто блокируем кнопку для него
             self.disabled = True
             self.style = discord.ButtonStyle.danger
             await interaction.message.edit(view=view)
@@ -128,36 +132,49 @@ class QuizRoomView(View):
         super().__init__(timeout=None)
         self.bot = bot
 
-    @discord.ui.button(label="💡 Соло Викторина (100 🪙)", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="💡 Соло Викторина (100 🪙)", style=discord.ButtonStyle.primary, custom_id="quiz_room_solo")
     async def solo(self, interaction: discord.Interaction, button: Button):
         user_data = await db.get_user(str(interaction.user.id))
         if user_data.get('vibecoins', 0) < 100:
             await interaction.response.send_message("❌ Недостаточно VibeКоинов!", ephemeral=True)
             return
             
+        await interaction.response.defer()
         new_bal = user_data.get('vibecoins', 0) - 100
         await db.update_user(str(interaction.user.id), vibecoins=new_bal)
         self.bot.dispatch("balance_updated", interaction.user, new_bal)
         
-        await interaction.response.defer()
         q = await fetch_question()
         view = QuizView(self.bot, interaction.user, q)
-        await interaction.followup.send(f"💡 **ВОПРОС:** {q['q']}", view=view)
+        await interaction.channel.send(content=f"{interaction.user.mention} 💡 **ВОПРОС:** {q['q']}", view=view)
+        
+        try: await interaction.message.delete()
+        except: pass
 
-    @discord.ui.button(label="⚔️ Битва Знатоков (300 🪙)", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="⚔️ Битва Знатоков", style=discord.ButtonStyle.success, custom_id="quiz_room_duel")
     async def invite(self, interaction: discord.Interaction, button: Button):
         user_data = await db.get_user(str(interaction.user.id))
         if user_data.get('vibecoins', 0) < 300:
-            await interaction.response.send_message("❌ Недостаточно VibeКоинов!", ephemeral=True)
+            await interaction.response.send_message("❌ Недостаточно VibeКоинов! Нужно **300 🪙** для ставки.", ephemeral=True)
             return
             
         from cogs.shop import GameDuelSelectView
-        await interaction.response.send_message("💡 Выбери оппонента для Битвы Знатоков:", view=GameDuelSelectView(self.bot, interaction.user, 300, "quiz"), ephemeral=True)
+        await interaction.response.send_message("💡 Выбери оппонента для Битвы Знатоков (ставка 300):", view=GameDuelSelectView(self.bot, interaction.user, 300, "quiz"), ephemeral=True)
 
-    @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.danger)
+    @discord.ui.button(label="📜 Правила", style=discord.ButtonStyle.secondary, custom_id="quiz_room_rules")
+    async def rules(self, interaction: discord.Interaction, button: Button):
+        rules_text = (
+            "**Правила Викторины:**\n\n"
+            "🔹 **Соло:** Тебе дается один вопрос из интернета. За правильный ответ ты получишь от **300 до 600 🪙**.\n"
+            "🔹 **Битва (1x1):** Вы с оппонентом видите один и тот же вопрос. **Кто первый** нажмет на правильный ответ — тот забирает весь банк!\n\n"
+            "⚠️ Будь внимателен: если ты нажмешь неправильно в битве, ты выбываешь из раунда!"
+        )
+        await interaction.response.send_message(rules_text, ephemeral=True)
+
+    @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.danger, custom_id="quiz_room_exit")
     async def exit(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_message("👋 Комната викторины закрыта.")
-        await asyncio.sleep(3)
+        await asyncio.sleep(2)
         try: await interaction.channel.delete()
         except: pass
 
