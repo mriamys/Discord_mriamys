@@ -225,4 +225,31 @@ class FakeStatusModal(Modal):
             await interaction.followup.send(f"✅ Готово!", ephemeral=True)
         except: await interaction.followup.send("❌ Ошибка.", ephemeral=True)
 
+    @commands.command(name="clear_threads", aliases=["чистка_веток", "удалить_румы"])
+    @commands.has_permissions(administrator=True)
+    async def clear_threads(self, ctx):
+        """Удаляет все игровые ветки в текущем канале (включая невидимые)."""
+        await ctx.send("🔍 Ищу активные игровые комнаты для удаления...")
+        
+        deleted_count = 0
+        prefixes = ["🎰┃казино-", "📦┃кейс-", "⚔️┃дуэль-", "🃏┃блэкджек-", "💡┃викторина-"]
+        
+        # Проверяем активные ветки
+        for thread in ctx.channel.threads:
+            if any(thread.name.startswith(p) for p in prefixes):
+                try:
+                    await thread.delete()
+                    deleted_count += 1
+                except: pass
+
+        # Проверяем архивные ветки (те, что бот "забыл")
+        async for thread in ctx.channel.archived_threads(private=True):
+            if any(thread.name.startswith(p) for p in prefixes):
+                try:
+                    await thread.delete()
+                    deleted_count += 1
+                except: pass
+
+        await ctx.send(f"✅ Чистка завершена! Удалено комнат: **{deleted_count}**")
+
 async def setup(bot): await bot.add_cog(Shop(bot))
