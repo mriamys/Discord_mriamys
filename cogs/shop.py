@@ -139,6 +139,24 @@ class ShopView(View):
     async def buy_status(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_modal(FakeStatusModal())
 
+    @discord.ui.button(label="⚡ Буст XP (2.5k)", style=discord.ButtonStyle.secondary, custom_id="shop_xp", row=0)
+    async def buy_xp(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.defer(ephemeral=True)
+        user_data = await db.get_user(str(interaction.user.id))
+        if user_data.get('vibecoins', 0) < 2500:
+            await interaction.followup.send("❌ Мало коинов!", ephemeral=True); return
+        await db.update_user(str(interaction.user.id), vibecoins=user_data['vibecoins'] - 2500, xp_boost_until=datetime.utcnow() + timedelta(hours=2))
+        await interaction.followup.send("⚡ Буст куплен! Действует 2 часа.", ephemeral=True)
+
+    @discord.ui.button(label="🔊 Рандом Мемы (2k)", style=discord.ButtonStyle.secondary, custom_id="shop_meme", row=0)
+    async def buy_meme(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.defer(ephemeral=True)
+        user_data = await db.get_user(str(interaction.user.id))
+        if user_data.get('vibecoins', 0) < 2000:
+            await interaction.followup.send("❌ Мало коинов!", ephemeral=True); return
+        await db.update_user(str(interaction.user.id), vibecoins=user_data['vibecoins'] - 2000, voice_memes_until=datetime.utcnow() + timedelta(hours=1), voice_memes_count=0)
+        await interaction.followup.send("🔊 Мемы заказаны на 1 час!", ephemeral=True)
+
     @discord.ui.button(label="🎰 Казино", style=discord.ButtonStyle.success, custom_id="shop_casino_v2", row=1)
     async def go_casino(self, interaction: discord.Interaction, button: Button):
         existing = await self._check_existing_thread(interaction, "казино-")
