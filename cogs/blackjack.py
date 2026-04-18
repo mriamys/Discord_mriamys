@@ -23,15 +23,12 @@ class BlackjackGame:
         self.bet = bet
         self.deck = []
         for suit in SUITS:
-            for rank in range(2, 15):
-                self.deck.append((rank, suit))
+            for rank in range(2, 15): self.deck.append((rank, suit))
         random.shuffle(self.deck)
         self.player_hand = [self.draw(), self.draw()]
         self.dealer_hand = [self.draw(), self.draw()]
         self.status = "playing"
-
     def draw(self): return self.deck.pop()
-
     def get_score(self, hand):
         score, aces = 0, 0
         for rank, suit in hand:
@@ -44,10 +41,7 @@ class BlackjackGame:
 class BlackjackView(View):
     def __init__(self, bot, member, bet, user_data):
         super().__init__(timeout=60)
-        self.bot = bot
-        self.member = member
-        self.bet = bet
-        self.user_data = user_data
+        self.bot, self.member, self.bet, self.user_data = bot, member, bet, user_data
         self.game = BlackjackGame(bet)
 
     def create_embed(self):
@@ -58,17 +52,13 @@ class BlackjackView(View):
         if self.game.status == "playing":
             d_cards = f"`{RANKS[self.game.dealer_hand[0][0]]} {self.game.dealer_hand[0][1]}` ` ? `"
             embed.add_field(name="🤖 Дилер", value=f"Карты: {d_cards}\nСчет: **?**", inline=False)
-            embed.description = f"💰 Ставка: **{self.bet} 🪙**\n*Нужна еще карта (Hit) или стоп (Stand)?*"
+            embed.description = f"💰 Ставка: **{self.bet} 🪙**"
         else:
             embed.add_field(name="🤖 Дилер", value=f"Карты: {format_hand(self.game.dealer_hand)}\nСчет: **{d_score}**", inline=False)
-            if self.game.status == "player_win":
-                embed.description = f"🎉 **ВЫИГРЫШ!** Ты получил **{self.bet * 2} 🪙**"; embed.color = discord.Color.green()
-            elif self.game.status == "dealer_win":
-                embed.description = f"💔 **ПРОИГРЫШ.** Дилер оказался сильнее."; embed.color = discord.Color.red()
-            elif self.game.status == "draw":
-                embed.description = f"🤝 **НИЧЬЯ.** Ставка возвращена."; embed.color = discord.Color.gold()
-            elif self.game.status == "bust":
-                embed.description = f"💥 **ПЕРЕБОР!** Ты набрал больше 21."; embed.color = discord.Color.red()
+            if self.game.status == "player_win": embed.description = f"🎉 **ВЫИГРЫШ!** +**{self.bet * 2} 🪙**"; embed.color = 0x2ECC71
+            elif self.game.status == "dealer_win": embed.description = f"💔 **ПРОИГРЫШ.**"; embed.color = 0xE74C3C
+            elif self.game.status == "draw": embed.description = f"🤝 **НИЧЬЯ.**"; embed.color = 0xF1C40F
+            elif self.game.status == "bust": embed.description = f"💥 **ПЕРЕБОР!** (>21)"; embed.color = 0xE74C3C
         return embed
 
     @discord.ui.button(label="Взять (Hit)", style=discord.ButtonStyle.primary)
@@ -76,18 +66,14 @@ class BlackjackView(View):
         if interaction.user.id != self.member.id: return
         self.game.player_hand.append(self.game.draw())
         if self.game.get_score(self.game.player_hand) > 21:
-            self.game.status = "bust"
-            await self.end_game(interaction)
-        else:
-            await interaction.response.edit_message(embed=self.create_embed(), view=self)
+            self.game.status = "bust"; await self.end_game(interaction)
+        else: await interaction.response.edit_message(embed=self.create_embed(), view=self)
 
     @discord.ui.button(label="Стоп (Stand)", style=discord.ButtonStyle.secondary)
     async def stand(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.member.id: return
-        while self.game.get_score(self.game.dealer_hand) < 17:
-            self.game.dealer_hand.append(self.game.draw())
-        p_score = self.game.get_score(self.game.player_hand)
-        d_score = self.game.get_score(self.game.dealer_hand)
+        while self.game.get_score(self.game.dealer_hand) < 17: self.game.dealer_hand.append(self.game.draw())
+        p_score, d_score = self.game.get_score(self.game.player_hand), self.game.get_score(self.game.dealer_hand)
         if d_score > 21 or p_score > d_score: self.game.status = "player_win"
         elif p_score < d_score: self.game.status = "dealer_win"
         else: self.game.status = "draw"
@@ -98,20 +84,18 @@ class BlackjackView(View):
         payout = self.bet * 2 if self.game.status == "player_win" else (self.bet if self.game.status == "draw" else 0)
         user_data = await db.get_user(str(self.member.id))
         new_balance = user_data.get('vibecoins', 0) - self.bet + payout
-        bj_wins = user_data.get('bj_wins', 0) + (1 if self.game.status == "player_win" else 0)
-        await db.update_user(str(self.member.id), vibecoins=new_balance, bj_wins=bj_wins)
+        await db.update_user(str(self.member.id), vibecoins=new_balance, bj_wins=user_data.get('bj_wins', 0) + (1 if self.game.status == "player_win" else 0))
         self.bot.dispatch("balance_updated", self.member, new_balance)
         await interaction.response.edit_message(embed=self.create_embed(), view=self)
-        # Ресенд меню через 2 сек
         await asyncio.sleep(2)
-        desc = "**ПРАВИЛА:**\nНабери больше дилера, но не больше 21.\nКартинки = 10, Туз = 1 или 11.\n\nВыбирай режим:"
+        desc = "**ПРАВИЛА:**\nНабери больше дилера, но не более 21. J,Q,K=10, Туз=1 или 11."
         await interaction.channel.send(embed=discord.Embed(title="🃏 БЛЭКДЖЕК", description=desc, color=0x2ECC71), view=BlackjackRoomView(self.bot))
 
 class BlackjackDuelView(View):
     def __init__(self, bot, p1, p2, bet):
         super().__init__(timeout=300)
         self.bot, self.bet, self.turn = bot, bet, p1.id
-        self.players = {p.id: {"member": p, "hand": [], "status": "playing"} for p in [p1, p2]}
+        self.players = {p.id: {"member": p, "hand": [None, None], "status": "playing"} for p in [p1, p2]}
         self.deck = []
         for suit in SUITS:
             for rank in range(2, 15): self.deck.append((rank, suit))
@@ -128,21 +112,20 @@ class BlackjackDuelView(View):
         return score
 
     def create_embed(self):
-        embed = discord.Embed(title="⚔️ Дуэль: Блэкджек", color=discord.Color.red())
+        embed = discord.Embed(title="⚔️ Блэкджек Дуэль", color=0xE74C3C)
         for pid, data in self.players.items():
             score = self.get_score(data["hand"])
             status = "🎯 ХОДИТ" if self.turn == pid and data["status"] == "playing" else data["status"].upper()
             embed.add_field(name=f"👤 {data['member'].display_name}", value=f"Карты: {format_hand(data['hand'])}\nСчет: **{score}**\nСтатус: `{status}`", inline=False)
-        embed.description = f"💰 Банк: **{self.bet * 2} 🪙**\nСейчас очередь: <@{self.turn}>"
+        embed.description = f"💰 Банк: **{self.bet * 2} 🪙**\nОчередь: <@{self.turn}>"
         return embed
 
     @discord.ui.button(label="Взять", style=discord.ButtonStyle.primary)
     async def hit(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.turn: return
-        p_data = self.players[self.turn]
-        p_data["hand"].append(self.deck.pop())
-        if self.get_score(p_data["hand"]) > 21:
-            p_data["status"] = "bust"; await self.next_turn(interaction)
+        self.players[self.turn]["hand"].append(self.deck.pop())
+        if self.get_score(self.players[self.turn]["hand"]) > 21:
+            self.players[self.turn]["status"] = "bust"; await self.next_turn(interaction)
         else: await interaction.response.edit_message(embed=self.create_embed(), view=self)
 
     @discord.ui.button(label="Стоп", style=discord.ButtonStyle.secondary)
@@ -165,24 +148,23 @@ class BlackjackDuelView(View):
         embed = self.create_embed()
         if winner_id:
             winner = self.players[winner_id]["member"]
-            embed.description = f"🏆 **ПОБЕДИТЕЛЬ: {winner.mention}!**\nБанк: **{self.bet * 2} 🪙**"; embed.color = discord.Color.green()
+            embed.description = f"🏆 **ПОБЕДИТЕЛЬ: {winner.mention}!**\nЗабрал банк: **{self.bet * 2} 🪙**"
             w_data = await db.get_user(str(winner_id))
             await db.update_user(str(winner_id), vibecoins=w_data['vibecoins'] + self.bet * 2, bj_wins=w_data.get('bj_wins', 0) + 1)
         else:
-            embed.description = "🤝 **НИЧЬЯ!** Ставки возвращены."; embed.color = discord.Color.gold()
+            embed.description = "🤝 **НИЧЬЯ!** Ставки возвращены."
             for pid in self.players:
                 u_data = await db.get_user(str(pid))
                 await db.update_user(str(pid), vibecoins=u_data['vibecoins'] + self.bet)
         await interaction.response.edit_message(embed=embed, view=self)
-        await asyncio.sleep(3)
-        await interaction.channel.send(embed=discord.Embed(title="🃏 БЛЭКДЖЕК", description="Выбирай режим:", color=0x2ECC71), view=BlackjackRoomView(self.bot))
+        await asyncio.sleep(3); await interaction.channel.send(embed=discord.Embed(title="🃏 БЛЭКДЖЕК", description="Выбирай режим:", color=0x2ECC71), view=BlackjackRoomView(self.bot))
 
 class BlackjackRoomView(View):
     def __init__(self, bot):
         super().__init__(timeout=None)
         self.bot = bot
 
-    @discord.ui.button(label="🃏 Соло (500 🪙)", style=discord.ButtonStyle.primary, custom_id="bj_solo_btn")
+    @discord.ui.button(label="🃏 Соло (500 🪙)", style=discord.ButtonStyle.primary, custom_id="bj_solo_v3")
     async def solo(self, interaction: discord.Interaction, button: Button):
         user_data = await db.get_user(str(interaction.user.id))
         if user_data.get('vibecoins', 0) < 500:
@@ -192,12 +174,12 @@ class BlackjackRoomView(View):
         try: await interaction.message.delete()
         except: pass
 
-    @discord.ui.button(label="⚔️ С другом (500 🪙)", style=discord.ButtonStyle.success, custom_id="bj_duel_btn")
+    @discord.ui.button(label="⚔️ С другом (500 🪙)", style=discord.ButtonStyle.success, custom_id="bj_duel_v3")
     async def invite(self, interaction: discord.Interaction, button: Button):
         from cogs.shop import GameDuelSelectView
-        await interaction.response.send_message("🃏 Выбери друга для Блэкджека:", view=GameDuelSelectView(self.bot, interaction.user, 500, "bj"), ephemeral=True)
+        await interaction.response.send_message("🃏 Выбери друга для игры:", view=GameDuelSelectView(self.bot, interaction.user.id, 500, "bj"), ephemeral=True)
 
-    @discord.ui.button(label="❌ Закрыть", style=discord.ButtonStyle.danger, custom_id="bj_close_btn")
+    @discord.ui.button(label="❌ Закрыть", style=discord.ButtonStyle.danger, custom_id="bj_close_v3")
     async def exit(self, interaction: discord.Interaction, button: Button):
         await interaction.response.send_message("🚪 Закрываю..."); await asyncio.sleep(2)
         try: await interaction.channel.delete()
