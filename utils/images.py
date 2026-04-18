@@ -74,11 +74,29 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     
     safe_name = ''.join(c for c in member.display_name if ord(c) < 10000).strip()[:20]
     if not safe_name: safe_name = "User"
+    
+    safe_rank = ''.join(c for c in rank_name if ord(c) < 10000).strip()
+    safe_rank = safe_rank.replace("[]", "").strip()
+    
     background.text((start_x, 40), safe_name, font=font_title, color="#ffffff")
-    background.text((start_x, 95), f"РАНГ: {rank_name}", font=font_rank, color=theme_color)
+    background.text((start_x, 95), f"РАНГ: {safe_rank}", font=font_rank, color=theme_color)
     
     if streak > 0:
-        background.text((840, 95), f"Стрик: {streak} 🔥", font=font_rank, color="#FF5733", align="right")
+        streak_text = f"Стрик: {streak}"
+        background.text((840, 95), streak_text, font=font_rank, color="#FF5733", align="right")
+        try:
+            from PIL import ImageDraw
+            draw = ImageDraw.Draw(background.image)
+            text_bbox = draw.textbbox((0, 0), streak_text, font=font_rank.font)
+            text_w = text_bbox[2] - text_bbox[0]
+
+            fire_img_path = os.path.join(BASE_DIR, "assets", "img", "fire.png")
+            if os.path.exists(fire_img_path):
+                fire_icon = Editor(fire_img_path).resize((24, 24))
+                fire_x = 835 - text_w - 28 # Add margin
+                background.paste(fire_icon, (fire_x, 95))
+        except Exception as e:
+            print(f"Fire icon error: {e}")
 
     background.text((start_x, 125), f"VibeКоины: {vibecoins:,}", font=font_text, color="#F1C40F")
     v_hours = voice_seconds // 3600
