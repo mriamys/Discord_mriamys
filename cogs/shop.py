@@ -14,6 +14,82 @@ SHOP_ITEMS = {
     "voice_meme":  {"name": "🔊 Рандомный высер", "price": 2000, "desc": "Бот будет заходить к тебе в войс и кидать мемные звуки целый час."}
 }
 
+# ─── ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ (НИКИ И СТАТУСЫ) ──────────────────────────────────
+
+class NicknameSelectView(View):
+    def __init__(self, user_data):
+        super().__init__(timeout=60)
+        self.user_data = user_data
+        self.add_item(UserSelect(placeholder="Выбери цель...", custom_id="nick_user_select"))
+
+    @discord.ui.select(cls=UserSelect, placeholder="Выбери участника...")
+    async def select_user(self, interaction: discord.Interaction, select: UserSelect):
+        target = select.values[0]
+        await interaction.response.send_modal(NicknameModal(target, self.user_data))
+
+class NicknameModal(Modal):
+    def __init__(self, target, user_data):
+        super().__init__(title=f"🏷️ Ник для {target.display_name}")
+        self.target = target
+        self.user_data = user_data
+        self.nick_input = TextInput(label="Новый ник", placeholder="Введи что-то смешное...", min_length=2, max_length=32)
+        self.add_item(self.nick_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        price = SHOP_ITEMS["nickname"]["price"]
+        # Финальная проверка баланса
+        current_data = await db.get_user(str(interaction.user.id))
+        if current_data.get('vibecoins', 0) < price:
+            await interaction.response.send_message("❌ Коины закончились!", ephemeral=True)
+            return
+
+        old_nick = self.target.display_name
+        try:
+            await self.target.edit(nick=self.nick_input.value)
+            new_bal = current_data['vibecoins'] - price
+            await db.update_user(str(interaction.user.id), vibecoins=new_bal, shop_spent=current_data.get('shop_spent', 0) + price)
+            
+            await interaction.response.send_message(f"✅ Ник {self.target.mention} изменен на **{self.nick_input.value}**!\nСписано: **{price} 🪙**", ephemeral=True)
+            
+            # Таймер на возврат (через час)
+            async def _reset():
+                await asyncio.sleep(3600)
+                try: await self.target.edit(nick=old_nick)
+                except: pass
+            asyncio.create_task(_reset())
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ У бота нет прав менять ник этому пользователю.", ephemeral=True)
+
+class FakeStatusModal(Modal):
+    def __init__(self, user_data):
+        super().__init__(title="🎭 Фейковый статус")
+        self.user_data = user_data
+        self.status_input = TextInput(label="Твой статус (приписка)", placeholder="Например: [АФК] или [Lover]", max_length=15)
+        self.add_item(self.status_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        price = SHOP_ITEMS["fake_status"]["price"]
+        current_data = await db.get_user(str(interaction.user.id))
+        if current_data.get('vibecoins', 0) < price:
+            await interaction.response.send_message("❌ Недостаточно средств!", ephemeral=True)
+            return
+
+        new_nick = f"{interaction.user.display_name} | {self.status_input.value}"
+        old_nick = interaction.user.display_name
+        try:
+            await interaction.user.edit(nick=new_nick[:32])
+            new_bal = current_data['vibecoins'] - price
+            await db.update_user(str(interaction.user.id), vibecoins=new_bal, shop_spent=current_data.get('shop_spent', 0) + price)
+            await interaction.response.send_message(f"✅ Статус установлен! Будет действовать 1 час.", ephemeral=True)
+            
+            async def _reset():
+                await asyncio.sleep(3600)
+                try: await interaction.user.edit(nick=old_nick)
+                except: pass
+            asyncio.create_task(_reset())
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ Не могу изменить твой ник.", ephemeral=True)
+
 # ─── ИНВАЙТЫ НА ДУЭЛИ ─────────────────────────────────────────────────────────
 
 class GameDuelInviteView(View):
@@ -23,7 +99,7 @@ class GameDuelInviteView(View):
         self.challenger = challenger
         self.target = target
         self.bet = bet
-        self.game_type = game_type # "bj" or "quiz"
+        self.game_type = game_type
 
     @discord.ui.button(label="Принять Вызов", style=discord.ButtonStyle.success, emoji="⚔️")
     async def btn_accept(self, interaction: discord.Interaction, button: Button):
@@ -148,8 +224,10 @@ class ShopView(View):
         async def callback(interaction: discord.Interaction):
             user_data = await db.get_user(str(interaction.user.id))
             price = SHOP_ITEMS[item_id]["price"]
-            if user_data.get("vibecoins", 0) < price:
-                await interaction.response.send_message(f"❌ Не хватает коинов! Нужно {price}.", ephemeral=True)
+            balance = user_data.get("vibecoins", 0)
+            
+            if balance < price:
+                await interaction.response.send_message(f"❌ Не хватает коинов! У тебя **{balance:,} 🪙**, нужно **{price:,} 🪙**.", ephemeral=True)
                 return
 
             if item_id == "nickname":
@@ -157,12 +235,17 @@ class ShopView(View):
             elif item_id == "fake_status":
                 await interaction.response.send_modal(FakeStatusModal(user_data))
             elif item_id == "xp_boost":
-                # ... (xp boost logic)
-                await db.update_user(str(interaction.user.id), vibecoins=user_data.get("vibecoins", 0) - price)
-                await interaction.response.send_message("⚡ Буст куплен!", ephemeral=True)
+                # XP Boost Logic
+                await db.update_user(str(interaction.user.id), 
+                                     vibecoins=balance - price, 
+                                     xp_boost_until=datetime.utcnow() + timedelta(hours=2))
+                await interaction.response.send_message(f"⚡ **Буст опыта x2** куплен! Действует 2 часа. Остаток: **{balance-price:,} 🪙**", ephemeral=True)
             elif item_id == "voice_meme":
-                await db.update_user(str(interaction.user.id), vibecoins=user_data.get("vibecoins", 0) - price)
-                await interaction.response.send_message("🔊 Мемы заказаны!", ephemeral=True)
+                await db.update_user(str(interaction.user.id), 
+                                     vibecoins=balance - price,
+                                     voice_memes_until=datetime.utcnow() + timedelta(hours=1),
+                                     voice_memes_count=0)
+                await interaction.response.send_message(f"🔊 **Рандомные высеры** заказаны на 1 час! Остаток: **{balance-price:,} 🪙**", ephemeral=True)
 
         return callback
 
@@ -175,11 +258,20 @@ class Shop(commands.Cog):
     @commands.command(name="setup_shop")
     @commands.has_permissions(administrator=True)
     async def setup_shop(self, ctx):
-        user_data = await db.get_user(str(ctx.author.id))
-        embed = discord.Embed(title="🛒 Магазин VibeCity", description=f"Твой баланс: **{user_data.get('vibecoins', 0):,} 🪙**", color=COLOR_MAIN)
-        embed.add_field(name="🎰 Развлечения", value="Жми кнопки ниже!", inline=False)
+        embed = discord.Embed(
+            title="🛒 Магазин VibeCity", 
+            description="Трать свои **VibeКоины** на крутые бонусы и развлечения!\n\n**Твой баланс можно узнать, нажав на любую кнопку покупки.**", 
+            color=COLOR_MAIN
+        )
         
-        #Persistent logic
+        for item_id, item in SHOP_ITEMS.items():
+            embed.add_field(name=f"{item['name']} — {item['price']} 🪙", value=f"*{item['desc']}*", inline=False)
+            
+        embed.add_field(name="──────────────", value="**🎮 ИГРОВЫЕ КОМНАТЫ**", inline=False)
+        embed.add_field(name="🎰 Развлечения", value="Жми зеленые кнопки ниже, чтобы открыть личный игровой стол!", inline=False)
+        embed.set_image(url="https://media.giphy.com/media/xUPGGw7jzcqeMw5dI8/giphy.gif")
+        
+        # Persistent logic
         old_msg_id = await db.get_setting("shop_message_id")
         old_ch_id = await db.get_setting("shop_channel_id")
         if old_msg_id and old_ch_id:
@@ -195,11 +287,11 @@ class Shop(commands.Cog):
         try: await ctx.message.delete()
         except: pass
 
+    @commands.hybrid_command(name="shop", description="Узнать свой баланс VibeКоинов")
+    async def shop(self, ctx):
+        user_data = await db.get_user(str(ctx.author.id))
+        balance = user_data.get("vibecoins", 0)
+        await ctx.send(f"🪙 Твой баланс: **{balance:,} VibeКоинов**.", ephemeral=True)
+
 async def setup(bot):
     await bot.add_cog(Shop(bot))
-
-# (Stubs for missing views to prevent crash)
-class NicknameSelectView(View):
-    def __init__(self, d): super().__init__()
-class FakeStatusModal(Modal):
-    def __init__(self, d): super().__init__(title="Status")
