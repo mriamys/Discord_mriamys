@@ -39,14 +39,14 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     # Создаем холст
     try:
         if os.path.exists(bg_path):
-            background = Editor(bg_path).resize((900, 380))
+            background = Editor(bg_path).resize((900, 250))
         else:
-            background = Editor(Canvas((900, 380), color="#1e1f22"))
+            background = Editor(Canvas((900, 250), color="#1e1f22"))
     except:
-        background = Editor(Canvas((900, 380), color="#2b2d31"))
+        background = Editor(Canvas((900, 250), color="#2b2d31"))
 
     # Стеклянная панель
-    background.rectangle((20, 20), width=860, height=340, color=(0, 0, 0, panel_opacity), radius=20)
+    background.rectangle((20, 20), width=860, height=210, color=(0, 0, 0, panel_opacity), radius=20)
     
     font_title = Font(path=font_bold_path, size=40)
     font_rank = Font(path=font_bold_path, size=22)
@@ -103,25 +103,6 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     background.bar((start_x, 190), max_width=610, height=25, percentage=100, color="#333333", radius=12)
     background.bar((start_x, 190), max_width=610, height=25, percentage=percentage, color=theme_color, radius=12)
     background.text((840, 170), f"{int(xp):,} / {int(next_level_xp):,} XP", font=font_small, color="#aaaaaa", align="right")
-
-    # ТРОФЕИ
-    background.text((40, 240), "ТРОФЕИ И ДОСТИЖЕНИЯ", font=font_rank, color="#ffffff")
-    background.rectangle((40, 265), width=820, height=80, color=(255, 255, 255, 20), radius=10)
-    
-    if user_achievements:
-        ach_x = 55
-        ach_y = 285
-        count = 0
-        # Сортируем ачивки по редкости или порядку получения
-        for ach_id in user_achievements:
-            if ach_id in ACHIEVEMENTS:
-                ach_data = ACHIEVEMENTS[ach_id]
-                background.text((ach_x, ach_y), ach_data.get('emoji', '🏆'), font=font_level, color="#ffffff")
-                ach_x += 50
-                count += 1
-                if count >= 16: break
-    else:
-        background.text((60, 295), "Выполняй задания и проявляй актив, чтобы получить трофеи!", font=font_text, color="#888888")
 
     return background.image_bytes
 
