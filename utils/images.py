@@ -150,7 +150,29 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     
     # АЧИВКИ (ТРОФЕИ)
     background.text((start_x, 240), "ТРОФЕИ:", font=font_small, color="#aaaaaa")
-    
+
+    if user_achievements:
+        # Рисуем первые 10 ачивок (чтобы влезли в ряд)
+        ach_x = start_x
+        ach_y = 265
+        count = 0
+        for ach_id in user_achievements:
+            if ach_id in ACHIEVEMENTS:
+                try:
+                    ach_data = ACHIEVEMENTS[ach_id]
+                    # Мы не можем легко грузить twemoji по URL в цикле (это медленно)
+                    # Используем emoji текст как фолбэк, если иконка не грузится
+                    background.text((ach_x, ach_y), ach_data.get('emoji', '🏆'), font=font_rank, color=theme_color)
+                    ach_x += 45
+                    count += 1
+                    if count >= 15: break # Лимит в один ряд
+                except:
+                    pass
+    else:
+        background.text((start_x, 265), "Пока нет трофеев...", font=font_text, color="#555555")
+
+    return background.image_bytes
+
     RARITY_ORDER = {"legendary": 4, "epic": 3, "rare": 2, "common": 1}
     RARITY_COLORS = {
         "common": "#95a5a6",   # серый

@@ -7,6 +7,7 @@ import logging
 class Achievements(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self._cache = set() # Кэш (user_id, ach_id) чтобы не спамить
         
         self.msg_thresholds = {1: 'first_msg', 10: 'msg_10', 50: 'msg_50', 100: 'msg_100', 250: 'msg_250', 500: 'msg_500', 1000: 'msg_1000', 2500: 'msg_2500', 5000: 'msg_5000', 10000: 'keyboard_rambo', 20000: 'msg_20000', 50000: 'msg_50000', 100000: 'msg_100000', 250000: 'msg_250000', 500000: 'msg_500000', 1000000: 'msg_1000000'}
         self.voice_thresholds = {600: 'voice_10m', 3600: 'voice_1h', 18000: 'chair_glued', 36000: 'voice_10h', 86400: 'voice_24h', 180000: 'voice_50h', 241200: 'voice_67h', 360000: 'voice_100h', 900000: 'voice_250h', 1800000: 'voice_500h', 3600000: 'voice_1000h', 18000000: 'voice_5000h'}
