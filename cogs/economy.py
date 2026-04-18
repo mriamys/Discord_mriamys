@@ -150,6 +150,11 @@ class Economy(commands.Cog):
             # Начинаем трекать, если стал eligible
             if eligible and user_id not in self.voice_sessions:
                 self.voice_sessions[user_id] = now
+            
+            # Проверяем достижения, если пользователь eligible. 
+            # Раньше это было внутри блока "if eligible and user_id not in self.voice_sessions", 
+            # что мешало получению ачивки, если кто-то зашел в уже существующую сессию.
+            if eligible:
                 self.bot.dispatch("voice_role_interaction", u, u.voice.channel.members)
                 
             # Заканчиваем трекать, если перестал быть eligible (вышел, замутился, остался один в канале)
@@ -198,18 +203,30 @@ class Economy(commands.Cog):
                 streak += 1
             else:
                 streak = 1
-                
+
             last_daily = datetime.utcnow() # Сохраняем в БД как UTC для целостности
             streak_bonus = min(streak * 100, 3000)
-            
+
+            # ВЫДАЧА ЕЖЕДНЕВНОГО ЗАДАНИЯ ПРИ ОБНОВЛЕНИИ СТРИКА
+            task_msg = ""
+            tasks_cog = self.bot.get_cog("DailyTasks")
+            if tasks_cog:
+                new_task = await tasks_cog.assign_new_task(u)
+                if new_task:
+                    task_msg = (
+                        f"\n\n🌟 **Твое ежедневное задание:**\n"
+                        f"**{new_task['name']}**: {new_task['desc']}\n"
+                        f"🎁 Награда: **{new_task['reward_coins']} 🪙** и **{new_task['reward_xp']} XP**"
+                    )
+
             if u:
                 try:
-                    self.bot.loop.create_task(u.send(f"🔥 Твой войс-стрик обновлен! Ты зашел **{streak} день подряд** и получил бонус: **{streak_bonus} 🪙**"))
+                    self.bot.loop.create_task(u.send(f"🔥 Твой войс-стрик обновлен! Ты зашел **{streak} день подряд** и получил бонус: **{streak_bonus} 🪙**{task_msg}"))
                 except:
                     pass
-                
+
                 self.bot.dispatch("streak_updated", u, streak)
-        
+
         # Проверяем буст опыта
         xp_multiplier = 1
         xp_boost_until = user_data.get('xp_boost_until')
@@ -218,22 +235,24 @@ class Economy(commands.Cog):
                 xp_boost_until = datetime.strptime(str(xp_boost_until).split('.')[0], '%Y-%m-%d %H:%M:%S')
             if xp_boost_until > datetime.utcnow():
                 xp_multiplier = 2
-                
+
         new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 6) + streak_bonus
         new_xp = user_data.get('xp', 0) + (delta_minutes * 10 * xp_multiplier)
-        
-        await db.update_user(user_id, 
-                             vibecoins=new_coins, 
-                             xp=new_xp, 
+
+        await db.update_user(user_id,
+                             vibecoins=new_coins,
+                             xp=new_xp,
                              voice_time_seconds=total_voice_time,
                              streak=streak,
                              last_daily=last_daily)
-        
+
         if u:
             if delta_minutes > 0:
                 self.bot.dispatch("xp_updated", u, new_xp)
-            self.bot.dispatch("voice_time_updated", u, total_voice_time)
-
+                # Передаем и общее время, и сколько минут начислено сейчас (для квеста)
+                self.bot.dispatch("voice_time_updated", u, total_voice_time, delta_minutes)
+            else:
+                self.bot.dispatch("voice_time_updated", u, total_voice_time, 0)
     @discord.app_commands.command(name="give-money", description="[Admin] Выдать VibeКоины пользователю")
     @discord.app_commands.default_permissions(administrator=True)
     async def give_money(self, interaction: discord.Interaction, member: discord.Member, amount: int):
@@ -249,6 +268,8 @@ class Economy(commands.Cog):
         user_data = await db.get_user(user_id)
         new_coins = user_data.get('vibecoins', 0) + amount
         await db.update_user(user_id, vibecoins=new_coins)
+        
+        self.bot.dispatch("balance_updated", member, new_coins)
         
         await interaction.response.send_message(f"✅ Выдано **{amount} 🪙** пользователю {member.mention}. Теперь у него: **{new_coins} 🪙**")
 

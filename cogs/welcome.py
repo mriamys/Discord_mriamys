@@ -33,6 +33,11 @@ class Welcome(commands.Cog):
 
         try:
             image_bytes = await generate_welcome_card(member)
+            
+            # Находим канал выдачи ролей
+            roles_channel = discord.utils.get(member.guild.text_channels, name="🎭┃выдача-ролей")
+            roles_mention = roles_channel.mention if roles_channel else "канале с выдачей ролей"
+
             if image_bytes:
                 # Фикс: easy-pil возвращает объект, готовый к отправке
                 file = discord.File(image_bytes, filename="welcome.png")
@@ -42,7 +47,7 @@ class Welcome(commands.Cog):
                     description=(
                         f"Добро пожаловать на сервер, {member.mention}! 🎉\n"
                         f"Мы рады тебя видеть. Чувствуй себя как дома!\n\n"
-                        f"**Обязательно выбери свои роли в канале с выдачей ролей**, "
+                        f"**Обязательно выбери свои роли в {roles_mention}**, "
                         f"чтобы получить доступ к нужным комнатам!"
                     ),
                     color=COLOR_SUCCESS

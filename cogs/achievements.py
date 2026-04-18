@@ -48,7 +48,7 @@ class Achievements(commands.Cog):
             await self.grant_achievement(member, self.msg_thresholds[msg_count])
 
     @commands.Cog.listener()
-    async def on_voice_time_updated(self, member, total_voice_time):
+    async def on_voice_time_updated(self, member, total_voice_time, delta_minutes=0):
         # voice time might skip exact seconds if bulk updated.
         for threshold, ach_id in self.voice_thresholds.items():
             if total_voice_time >= threshold:
@@ -80,12 +80,20 @@ class Achievements(commands.Cog):
             if new_xp >= threshold:
                 await self.grant_achievement(member, ach_id)
             
+        await self._check_balance_achievements(member)
+
+    async def _check_balance_achievements(self, member):
         user_data = await db.get_user(str(member.id))
         vibecoins = user_data.get('vibecoins', 0)
         
         for threshold, ach_id in self.bal_thresholds.items():
             if vibecoins >= threshold:
                 await self.grant_achievement(member, ach_id)
+
+    @commands.Cog.listener()
+    async def on_balance_updated(self, member, new_balance):
+        # We can use new_balance directly if provided, or use the helper
+        await self._check_balance_achievements(member)
 
     @commands.Cog.listener()
     async def on_streak_updated(self, member, new_streak):
@@ -98,6 +106,9 @@ class Achievements(commands.Cog):
             if total_spent >= threshold:
                 await self.grant_achievement(member, ach_id)
                 
+        # Проверка на баланс после выигрыша
+        await self._check_balance_achievements(member)
+                
         # Проверка на джекпот x50
         if bet >= 10 and payout >= bet * 50:
             await self.grant_achievement(member, "casino_jackpot")
@@ -109,6 +120,10 @@ class Achievements(commands.Cog):
             "тяночка": "ach_woman",
             "woman": "ach_woman",
             "женщина": "ach_woman",
+            "девоч": "ach_woman",
+            "тян": "ach_woman",
+            "girl": "ach_woman",
+            "female": "ach_woman",
             "скуф": "ach_skuf",
             "админ": "ach_admin",
             "создатель": "ach_admin",
@@ -131,7 +146,11 @@ class Achievements(commands.Cog):
         role_keywords = {
             "девушка": "ach_woman_reply",
             "тяночка": "ach_woman_reply",
-            "женщина": "ach_woman_reply"
+            "женщина": "ach_woman_reply",
+            "девоч": "ach_woman_reply",
+            "тян": "ach_woman_reply",
+            "girl": "ach_woman_reply",
+            "female": "ach_woman_reply"
         }
         if hasattr(replied_to_member, 'roles'):
             for role in replied_to_member.roles:
@@ -158,6 +177,28 @@ class Achievements(commands.Cog):
     @commands.Cog.listener()
     async def on_boost_purchased(self, member):
         await self.grant_achievement(member, "xp_booster")
+
+    @commands.Cog.listener()
+    async def on_blackjack_win(self, member, bj_wins):
+        if bj_wins >= 1:
+            await self.grant_achievement(member, "bj_first")
+        if bj_wins >= 10:
+            await self.grant_achievement(member, "bj_10")
+
+    @commands.Cog.listener()
+    async def on_quiz_answered(self, member, correct, correct_count):
+        if correct:
+            if correct_count >= 1:
+                await self.grant_achievement(member, "quiz_first")
+            if correct_count >= 10:
+                await self.grant_achievement(member, "quiz_10")
+
+    @commands.Cog.listener()
+    async def on_quest_completed(self, member, quests_completed):
+        if quests_completed >= 1:
+            await self.grant_achievement(member, "quest_first")
+        if quests_completed >= 10:
+            await self.grant_achievement(member, "quest_10")
 
 async def setup(bot):
     await bot.add_cog(Achievements(bot))

@@ -622,5 +622,47 @@ ACHIEVEMENTS = \
         "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/26a1.png",
         "emoji": "⚡",
         "rarity": "common"
+    },
+    "bj_first": {
+        "name": "Карты, деньги...",
+        "desc": "Выиграть свою первую партию в Блэкджек.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f0cf.png",
+        "emoji": "🃏",
+        "rarity": "common"
+    },
+    "bj_10": {
+        "name": "Счетчик карт",
+        "desc": "Одержать 10 побед в Блэкджек.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f522.png",
+        "emoji": "🔢",
+        "rarity": "rare"
+    },
+    "quiz_first": {
+        "name": "Первая извилина",
+        "desc": "Правильно ответить на вопрос викторины.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f4a1.png",
+        "emoji": "💡",
+        "rarity": "common"
+    },
+    "quiz_10": {
+        "name": "Знаток",
+        "desc": "Дать 10 правильных ответов в викторине.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f393.png",
+        "emoji": "🎓",
+        "rarity": "rare"
+    },
+    "quest_first": {
+        "name": "Исполнительный",
+        "desc": "Выполнить свое первое ежедневное задание.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f4dc.png",
+        "emoji": "📜",
+        "rarity": "common"
+    },
+    "quest_10": {
+        "name": "Стахановец",
+        "desc": "Выполнить 10 ежедневных заданий. Труд облагораживает.",
+        "icon_url": "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/2b50.png",
+        "emoji": "⭐",
+        "rarity": "rare"
     }
 }

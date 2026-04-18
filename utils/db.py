@@ -1,6 +1,7 @@
 import aiomysql
 import logging
-from config import DB_HOST, DB_USER, DB_PASS, DB_NAME
+import asyncio
+from config import DB_CONFIG
 
 class Database:
     def __init__(self):
@@ -8,137 +9,157 @@ class Database:
 
     async def connect(self):
         try:
-            # We assume the database `mriamys_bot` exists or we create it.
-            # Due to limitations on standard users, the DB should be pre-created by the server admin.
             self.pool = await aiomysql.create_pool(
-                host=DB_HOST,
-                user=DB_USER,
-                password=DB_PASS,
-                db=DB_NAME,
+                host=DB_CONFIG['host'],
+                port=DB_CONFIG['port'],
+                user=DB_CONFIG['user'],
+                password=DB_CONFIG['password'],
+                db=DB_CONFIG['database'],
                 autocommit=True,
                 cursorclass=aiomysql.DictCursor
             )
-            logging.info("Connected to MySQL Database.")
-            await self.init_tables()
+            logging.info("Connected to MySQL Database!")
         except Exception as e:
-            logging.error(f"Failed to connect to MySQL: {e}")
-            logging.error("Please check your DB_HOST, DB_USER, DB_PASS, and DB_NAME in .env")
+            logging.error(f"Database Connection Error: {e}")
+            raise e
 
     async def init_tables(self):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # Таблица пользователей (Экономика и Уровни + Статистика для ачивок)
+                # Основная таблица пользователей
                 await cur.execute('''
                     CREATE TABLE IF NOT EXISTS users (
                         user_id VARCHAR(25) PRIMARY KEY,
-                        vibecoins INT DEFAULT 0,
-                        xp INT DEFAULT 0,
+                        xp FLOAT DEFAULT 0,
                         level INT DEFAULT 0,
-                        streak INT DEFAULT 0,
-                        last_daily DATETIME DEFAULT NULL,
-                        voice_time_seconds INT DEFAULT 0,
+                        vibecoins INT DEFAULT 0,
                         msg_count INT DEFAULT 0,
                         shop_spent INT DEFAULT 0,
                         nick_changes INT DEFAULT 0,
-                        casino_spent INT DEFAULT 0,
-                        casino_wins INT DEFAULT 0,
+                        voice_time_seconds INT DEFAULT 0,
                         xp_boost_until DATETIME DEFAULT NULL,
                         cases_opened INT DEFAULT 0,
                         duels_won INT DEFAULT 0,
                         memes_ordered INT DEFAULT 0,
                         voice_memes_until DATETIME DEFAULT NULL,
-                        voice_memes_count INT DEFAULT 0
+                        voice_memes_count INT DEFAULT 0,
+                        quest_id VARCHAR(50) DEFAULT NULL,
+                        quest_progress INT DEFAULT 0,
+                        quest_target INT DEFAULT 0,
+                        quest_reward_coins INT DEFAULT 0,
+                        quest_reward_xp INT DEFAULT 0,
+                        quest_date DATE DEFAULT NULL,
+                        quests_completed INT DEFAULT 0,
+                        bj_wins INT DEFAULT 0,
+                        quiz_correct INT DEFAULT 0
                     )
                 ''')
                 
-                # Добавляем колонки в существующие таблицы по одной
+                # Таблица для глобальных настроек бота
+                await cur.execute('''
+                    CREATE TABLE IF NOT EXISTS global_settings (
+                        `key` VARCHAR(50) PRIMARY KEY,
+                        `value` VARCHAR(255)
+                    )
+                ''')
+                
+                # Миграции
                 columns_to_add = [
                     ("msg_count", "INT DEFAULT 0"),
                     ("shop_spent", "INT DEFAULT 0"),
                     ("nick_changes", "INT DEFAULT 0"),
-                    ("casino_spent", "INT DEFAULT 0"),
-                    ("casino_wins", "INT DEFAULT 0"),
+                    ("voice_time_seconds", "INT DEFAULT 0"),
                     ("xp_boost_until", "DATETIME DEFAULT NULL"),
                     ("cases_opened", "INT DEFAULT 0"),
                     ("duels_won", "INT DEFAULT 0"),
                     ("memes_ordered", "INT DEFAULT 0"),
                     ("voice_memes_until", "DATETIME DEFAULT NULL"),
-                    ("voice_memes_count", "INT DEFAULT 0")
+                    ("voice_memes_count", "INT DEFAULT 0"),
+                    ("quest_id", "VARCHAR(50) DEFAULT NULL"),
+                    ("quest_progress", "INT DEFAULT 0"),
+                    ("quest_target", "INT DEFAULT 0"),
+                    ("quest_reward_coins", "INT DEFAULT 0"),
+                    ("quest_reward_xp", "INT DEFAULT 0"),
+                    ("quest_date", "DATE DEFAULT NULL"),
+                    ("quests_completed", "INT DEFAULT 0"),
+                    ("bj_wins", "INT DEFAULT 0"),
+                    ("quiz_correct", "INT DEFAULT 0")
                 ]
                 
                 for col_name, col_type in columns_to_add:
                     try:
                         await cur.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
                     except Exception:
-                        pass # Колонка уже существует
+                        pass 
                 
                 # Таблица кастомного профиля
                 await cur.execute('''
                     CREATE TABLE IF NOT EXISTS profile_settings (
                         user_id VARCHAR(25) PRIMARY KEY,
-                        bg_color VARCHAR(10) DEFAULT '#2b2d31',
-                        title VARCHAR(50) DEFAULT NULL,
-                        FOREIGN KEY(user_id) REFERENCES users(user_id)
+                        bg_color VARCHAR(15) DEFAULT '#2b2d31'
                     )
                 ''')
-                
-                # Таблица связи юзер - ачивки
+
+                # Таблица достижений
                 await cur.execute('''
-                    CREATE TABLE IF NOT EXISTS user_achievements (
+                    CREATE TABLE IF NOT EXISTS achievements (
                         user_id VARCHAR(25),
                         achievement_id VARCHAR(50),
-                        date_earned DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        PRIMARY KEY(user_id, achievement_id),
-                        FOREIGN KEY(user_id) REFERENCES users(user_id)
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (user_id, achievement_id)
                     )
                 ''')
-        logging.info("Database tables initialized.")
+
+    async def get_setting(self, key: str, default=None):
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT `value` FROM global_settings WHERE `key` = %s", (key,))
+                res = await cur.fetchone()
+                return res['value'] if res else default
+
+    async def set_setting(self, key: str, value: str):
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("REPLACE INTO global_settings (`key`, `value`) VALUES (%s, %s)", (key, value))
 
     async def get_user(self, user_id: str):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT * FROM users WHERE user_id = %s", (str(user_id),))
-                user = await cur.fetchone()
-                if not user:
-                    await cur.execute("INSERT INTO users (user_id) VALUES (%s)", (str(user_id),))
-                    return {"user_id": str(user_id), "vibecoins": 0, "xp": 0, "level": 0, "streak": 0, "last_daily": None, "voice_time_seconds": 0, "msg_count": 0, "shop_spent": 0, "nick_changes": 0, "casino_spent": 0, "casino_wins": 0, "xp_boost_until": None, "cases_opened": 0, "duels_won": 0, "memes_ordered": 0, "voice_memes_until": None, "voice_memes_count": 0}
-                return user
-                
-    async def get_achievements(self, user_id: str):
+                await cur.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
+                res = await cur.fetchone()
+                if not res:
+                    await cur.execute("INSERT INTO users (user_id) VALUES (%s)", (user_id,))
+                    await cur.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
+                    res = await cur.fetchone()
+                return res
+
+    async def update_user(self, user_id: str, **kwargs):
+        if not kwargs: return
+        fields = ", ".join([f"{k} = %s" for k in kwargs.keys()])
+        values = list(kwargs.values())
+        values.append(user_id)
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT achievement_id FROM user_achievements WHERE user_id = %s", (str(user_id),))
-                rows = await cur.fetchall()
-                return [r['achievement_id'] for r in rows] if rows else []
+                await cur.execute(f"UPDATE users SET {fields} WHERE user_id = %s", tuple(values))
 
-    async def add_achievement(self, user_id: str, achievement_id: str) -> bool:
-        """Возвращает True если ачивка новая и добавлена, False если уже была."""
+    async def add_achievement(self, user_id: str, ach_id: str):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 try:
-                    await cur.execute("INSERT INTO user_achievements (user_id, achievement_id) VALUES (%s, %s)", (str(user_id), achievement_id))
+                    await cur.execute("INSERT INTO achievements (user_id, achievement_id) VALUES (%s, %s)", (user_id, ach_id))
                     return True
-                except Exception:
-                    # Duplicate entry
+                except:
                     return False
-                
-    async def update_user(self, user_id: str, **kwargs):
-        if not kwargs: return
-        
-        set_clause = ", ".join([f"{k} = %s" for k in kwargs.keys()])
-        values = list(kwargs.values())
-        values.append(str(user_id))
-        
+
+    async def get_achievements(self, user_id: str):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                # В случае, если юзера еще нет – обеспечим его создание:
-                await self.get_user(str(user_id)) 
-                
-                query = f"UPDATE users SET {set_clause} WHERE user_id = %s"
-                await cur.execute(query, values)
+                await cur.execute("SELECT achievement_id FROM achievements WHERE user_id = %s", (user_id,))
+                res = await cur.fetchall()
+                return [row['achievement_id'] for row in res]
 
     async def get_leaderboard(self, category: str, limit: int = 10):
-        order_by = "level DESC, xp DESC"
+        order_by = "xp DESC"
         if category == "coins":
             order_by = "vibecoins DESC"
         elif category == "voice":
@@ -148,22 +169,14 @@ class Database:
             
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(f"SELECT * FROM users ORDER BY {order_by} LIMIT %s", (limit,))
-                return await cur.fetchall()
-
-    async def get_active_voice_memes(self):
-        """Возвращает список пользователей, у которых активен аудио-троллинг."""
-        from datetime import datetime
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute("SELECT * FROM users WHERE voice_memes_until > %s AND voice_memes_count < 10", (datetime.utcnow(),))
+                await cur.execute(f"SELECT user_id, level, xp, vibecoins, streak, voice_time_seconds FROM users ORDER BY {order_by} LIMIT %s", (limit,))
                 return await cur.fetchall()
 
     async def get_expired_boosts(self):
-        from datetime import datetime
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT user_id FROM users WHERE xp_boost_until IS NOT NULL AND xp_boost_until <= %s", (datetime.utcnow(),))
+                from datetime import datetime
+                await cur.execute("SELECT user_id FROM users WHERE xp_boost_until IS NOT NULL AND xp_boost_until < %s", (datetime.utcnow(),))
                 return await cur.fetchall()
 
 db = Database()

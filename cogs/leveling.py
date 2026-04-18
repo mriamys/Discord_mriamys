@@ -331,46 +331,28 @@ class Leveling(commands.Cog):
         vibecoins = user_data.get('vibecoins', 0)
         voice_seconds = user_data.get('voice_time_seconds', 0)
         
+        # Добавляем текущую сессию войса ТОЛЬКО ДЛЯ ОТОБРАЖЕНИЯ (без записи в БД здесь, чтобы избежать дюпа)
         import time
         economy_cog = self.bot.get_cog("Economy")
         if economy_cog and str(member.id) in economy_cog.voice_sessions:
             now = time.time()
             join_time = economy_cog.voice_sessions[str(member.id)]
             duration = int(now - join_time)
-            
             if duration > 0:
-                old_seconds = voice_seconds
-                total_voice_time = old_seconds + duration
-                
-                old_minutes = old_seconds // 60
-                new_minutes = total_voice_time // 60
-                delta_minutes = new_minutes - old_minutes
-                
-                # Обновляем локальные переменные для отображения на картинке
-                vibecoins += (delta_minutes * 6)
-                xp += (delta_minutes * 10)
-                voice_seconds = total_voice_time
-                
-                # Обновляем данные пользователя в БД в реальном времени
-                await db.update_user(str(member.id), 
-                                     vibecoins=vibecoins, 
-                                     xp=xp, 
-                                     voice_time_seconds=total_voice_time)
-                                     
-                if delta_minutes > 0:
-                    self.bot.dispatch("xp_updated", member, xp)
-                self.bot.dispatch("voice_time_updated", member, total_voice_time)
-                
-                # Сбрасываем сессию на сейчас, чтобы избежать двойного начисления
-                economy_cog.voice_sessions[str(member.id)] = now
+                voice_seconds += duration
+                # Коины и XP отображаем примерно, они запишутся в БД циклом из Economy
+                old_min = (voice_seconds - duration) // 60
+                new_min = voice_seconds // 60
+                delta = new_min - old_min
+                vibecoins += (delta * 6)
+                xp += (delta * 10)
         
         rank_name = self.get_rank_role_name_for_level(level)
         
-        # Автоматическая выдача роли ранга, если её нет (например, для новых юзеров с 0 уровнем)
+        # Автоматическая выдача роли ранга, если её нет
         target_role = discord.utils.get(member.guild.roles, name=rank_name)
         if target_role and target_role not in member.roles:
             try:
-                # Удаляем старые ранговые роли перед выдачей новой
                 rank_names = list(MEME_RANKS.values())
                 roles_to_remove = [r for r in member.roles if r.name in rank_names]
                 if roles_to_remove:
