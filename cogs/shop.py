@@ -91,16 +91,41 @@ class ShopView(View):
 
     def _start_cleanup_task(self, thread):
         async def _delete_thread():
-            await asyncio.sleep(1800) # 30 минут
+            await asyncio.sleep(1800)
             try: await thread.delete()
             except: pass
         asyncio.create_task(_delete_thread())
 
-    @discord.ui.button(label="🎰 Казино", style=discord.ButtonStyle.success, custom_id="shop_casino_v3", row=1)
-    async def go_casino(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="🏷️ Погоняло (1k)", style=discord.ButtonStyle.secondary, custom_id="shop_nick", row=0)
+    async def buy_nickname(self, interaction, button):
+        await interaction.response.send_message("🏷️ Выбери цель:", view=NicknameSelectView(), ephemeral=True)
+
+    @discord.ui.button(label="🎭 Статус (500)", style=discord.ButtonStyle.secondary, custom_id="shop_status", row=0)
+    async def buy_status(self, interaction, button):
+        await interaction.response.send_modal(FakeStatusModal())
+
+    @discord.ui.button(label="⚡ Буст XP (2.5k)", style=discord.ButtonStyle.secondary, custom_id="shop_xp_boost", row=0)
+    async def buy_xp(self, interaction, button):
+        await interaction.response.defer(ephemeral=True)
+        u_data = await db.get_user(str(interaction.user.id))
+        if u_data.get('vibecoins', 0) < 2500:
+            await interaction.followup.send("❌ Мало коинов!", ephemeral=True); return
+        await db.update_user(str(interaction.user.id), vibecoins=u_data['vibecoins'] - 2500, xp_boost_until=datetime.utcnow() + timedelta(hours=2))
+        await interaction.followup.send("⚡ Буст x2 на 2 часа куплен!", ephemeral=True)
+
+    @discord.ui.button(label="🔊 Мемы (2k)", style=discord.ButtonStyle.secondary, custom_id="shop_voice_meme", row=0)
+    async def buy_meme(self, interaction, button):
+        await interaction.response.defer(ephemeral=True)
+        u_data = await db.get_user(str(interaction.user.id))
+        if u_data.get('vibecoins', 0) < 2000:
+            await interaction.followup.send("❌ Мало коинов!", ephemeral=True); return
+        await db.update_user(str(interaction.user.id), vibecoins=u_data['vibecoins'] - 2000, voice_memes_until=datetime.utcnow() + timedelta(hours=1), voice_memes_count=0)
+        await interaction.followup.send("🔊 Мемы заказаны на 1 час!", ephemeral=True)
+
+    @discord.ui.button(label="🎰 Казино", style=discord.ButtonStyle.success, custom_id="shop_casino", row=1)
+    async def go_casino(self, interaction, button):
         existing = await self._check_existing_thread(interaction, "казино-")
-        if existing:
-            await interaction.response.send_message(f"❌ У тебя уже есть открытый стол: {existing.mention}", ephemeral=True); return
+        if existing: await interaction.response.send_message(f"❌ Есть открытый стол: {existing.mention}", ephemeral=True); return
         await interaction.response.defer(ephemeral=True)
         thread = await interaction.channel.create_thread(name=f"🎰┃казино-{interaction.user.name[:10]}", type=discord.ChannelType.private_thread)
         await thread.add_user(interaction.user)
@@ -110,25 +135,22 @@ class ShopView(View):
         await interaction.followup.send(f"✅ Ветка создана: {thread.mention}", ephemeral=True)
         self._start_cleanup_task(thread)
 
-    @discord.ui.button(label="📦 Кейсы", style=discord.ButtonStyle.success, custom_id="shop_cases_v3", row=1)
-    async def go_cases(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="📦 Кейсы", style=discord.ButtonStyle.success, custom_id="shop_cases", row=1)
+    async def go_cases(self, interaction, button):
         existing = await self._check_existing_thread(interaction, "кейс-")
-        if existing:
-            await interaction.response.send_message(f"❌ У тебя уже есть открытая комната с кейсами: {existing.mention}", ephemeral=True); return
+        if existing: await interaction.response.send_message(f"❌ Есть открытая комната: {existing.mention}", ephemeral=True); return
         interaction.client.dispatch("create_vibe_case_room", interaction)
 
-    @discord.ui.button(label="⚔️ Дуэли", style=discord.ButtonStyle.success, custom_id="shop_duels_v3", row=1)
-    async def go_duels(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="⚔️ Дуэли", style=discord.ButtonStyle.success, custom_id="shop_duels", row=1)
+    async def go_duels(self, interaction, button):
         existing = await self._check_existing_thread(interaction, "дуэль-")
-        if existing:
-            await interaction.response.send_message(f"❌ У тебя уже есть активная комната дуэлей: {existing.mention}", ephemeral=True); return
+        if existing: await interaction.response.send_message(f"❌ Есть активная комната: {existing.mention}", ephemeral=True); return
         interaction.client.dispatch("create_duel_room", interaction)
 
-    @discord.ui.button(label="🃏 Блэкджек", style=discord.ButtonStyle.success, custom_id="shop_bj_v3", row=2)
-    async def go_bj(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="🃏 Блэкджек", style=discord.ButtonStyle.success, custom_id="shop_blackjack", row=2)
+    async def go_bj(self, interaction, button):
         existing = await self._check_existing_thread(interaction, "блэкджек-")
-        if existing:
-            await interaction.response.send_message(f"❌ Твой стол уже здесь: {existing.mention}", ephemeral=True); return
+        if existing: await interaction.response.send_message(f"❌ Твой стол уже здесь: {existing.mention}", ephemeral=True); return
         await interaction.response.defer(ephemeral=True)
         thread = await interaction.channel.create_thread(name=f"🃏┃блэкджек-{interaction.user.name[:10]}", type=discord.ChannelType.private_thread)
         await thread.add_user(interaction.user)
@@ -139,11 +161,10 @@ class ShopView(View):
         await interaction.followup.send(f"✅ Готово: {thread.mention}", ephemeral=True)
         self._start_cleanup_task(thread)
 
-    @discord.ui.button(label="💡 Викторина", style=discord.ButtonStyle.success, custom_id="shop_quiz_v3", row=2)
-    async def go_quiz(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="💡 Викторина", style=discord.ButtonStyle.success, custom_id="shop_quiz", row=2)
+    async def go_quiz(self, interaction, button):
         existing = await self._check_existing_thread(interaction, "викторина-")
-        if existing:
-            await interaction.response.send_message(f"❌ Ты не закончил викторину: {existing.mention}", ephemeral=True); return
+        if existing: await interaction.response.send_message(f"❌ Ты не закончил викторину: {existing.mention}", ephemeral=True); return
         await interaction.response.defer(ephemeral=True)
         thread = await interaction.channel.create_thread(name=f"💡┃викторина-{interaction.user.name[:10]}", type=discord.ChannelType.private_thread)
         await thread.add_user(interaction.user)
@@ -153,14 +174,6 @@ class ShopView(View):
         await thread.send(embed=discord.Embed(title="💡 ВИКТОРИНА", description=desc, color=COLOR_MAIN), view=QuizRoomView(interaction.client))
         await interaction.followup.send(f"✅ Готово: {thread.mention}", ephemeral=True)
         self._start_cleanup_task(thread)
-
-    @discord.ui.button(label="🏷️ Погоняло (1k)", style=discord.ButtonStyle.secondary, custom_id="shop_nick_v2", row=0)
-    async def buy_nickname(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_message("🏷️ Выбери цель:", view=NicknameSelectView(), ephemeral=True)
-
-    @discord.ui.button(label="🎭 Фейк Статус (500)", style=discord.ButtonStyle.secondary, custom_id="shop_status_v2", row=0)
-    async def buy_status(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(FakeStatusModal())
 
 # ─── SHOP COG ─────────────────────────────────────────────────────────────────
 
@@ -219,7 +232,7 @@ class NicknameModal(Modal):
             old_nick = self.target.display_name
             await self.target.edit(nick=self.nick_input.value)
             await db.update_user(str(interaction.user.id), vibecoins=user_data['vibecoins'] - 1000)
-            await interaction.followup.send("✅ Готово!", ephemeral=True)
+            await interaction.followup.send(f"✅ Готово!", ephemeral=True)
             async def _res(): await asyncio.sleep(3600); await self.target.edit(nick=old_nick)
             asyncio.create_task(_res())
         except: await interaction.followup.send("❌ Ошибка.", ephemeral=True)
@@ -243,7 +256,7 @@ class FakeStatusModal(Modal):
             old_nick = interaction.user.display_name
             await interaction.user.edit(nick=f"{old_nick} | {self.status_input.value}"[:32])
             await db.update_user(str(interaction.user.id), vibecoins=user_data['vibecoins'] - 500)
-            await interaction.followup.send("✅ Готово!", ephemeral=True)
+            await interaction.followup.send(f"✅ Готово!", ephemeral=True)
             async def _res(): await asyncio.sleep(3600); await interaction.user.edit(nick=old_nick)
             asyncio.create_task(_res())
         except: await interaction.followup.send("❌ Ошибка.", ephemeral=True)
