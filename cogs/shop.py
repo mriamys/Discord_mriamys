@@ -254,6 +254,7 @@ class ShopView(View):
 class Shop(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.bot.add_view(ShopView())
 
     @commands.command(name="setup_shop")
     @commands.has_permissions(administrator=True)

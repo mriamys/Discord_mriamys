@@ -112,7 +112,7 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     xp_needed = next_level_xp - current_level_xp
     percentage = min(max((xp_in_level / xp_needed) * 100, 0), 100) if xp_needed > 0 else 0
     
-    background.bar((start_x, 185), max_width=590, height=30, percentage=100, color="#313338", radius=15)
+    background.bar((start_x, 185), max_width=590, height=30, percentage=100, color="#1a1a1a", radius=15)
     
     if percentage > 0:
         background.bar((start_x, 185), max_width=590, height=30, percentage=percentage, color=theme_color, radius=15)
