@@ -88,7 +88,12 @@ class BlackjackView(View):
         self.bot.dispatch("balance_updated", self.member, new_balance)
         await interaction.response.edit_message(embed=self.create_embed(), view=self)
         await asyncio.sleep(2)
-        desc = "**ПРАВИЛА:**\nНабери больше дилера, но не более 21. J,Q,K=10, Туз=1 или 11."
+        desc = (
+            "**КРАТКИЕ ПРАВИЛА:**\n"
+            "▫️ Собери сумму карт ближе к **21**, но не больше.\n"
+            "▫️ Картинки = **10**, Туз = **11 или 1**.\n"
+            "▫️ Если у тебя >21 — ты проиграл."
+        )
         await interaction.channel.send(embed=discord.Embed(title="🃏 БЛЭКДЖЕК", description=desc, color=0x2ECC71), view=BlackjackRoomView(self.bot))
 
 class BlackjackDuelView(View):

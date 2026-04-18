@@ -118,8 +118,17 @@ class ShopView(View):
         await thread.add_user(interaction.user)
         if interaction.guild.owner: await thread.add_user(interaction.guild.owner)
         from cogs.blackjack import BlackjackRoomView
-        desc = "**ПРАВИЛА:**\nНабери больше очков, чем у дилера, но не более 21.\n🔹 J,Q,K = 10. 🔹 Ace = 1 или 11."
-        await thread.send(embed=discord.Embed(title="🃏 БЛЭКДЖЕК", description=desc, color=COLOR_MAIN), view=BlackjackRoomView(interaction.client))
+        desc = (
+            "**Суть игры:** Нужно собрать сумму карт как можно ближе к **21**, но не больше.\n\n"
+            "**Как считать очки:**\n"
+            "▫️ Карты с цифрами (**2-10**) = по номиналу.\n"
+            "▫️ Картинки (**Валет, Дама, Король**) = всегда **10 очков**.\n"
+            "▫️ **Туз** = **11** или **1** (бот выберет лучшее для тебя).\n\n"
+            "**Твой ход:**\n"
+            "Нажми **Hit**, чтобы взять карту, или **Stand**, чтобы остановиться.\n"
+            "⚠️ Если наберешь больше 21 — ты сразу проиграл!"
+        )
+        await thread.send(embed=discord.Embed(title="🃏 ИГРОВОЙ СТОЛ: БЛЭКДЖЕК", description=desc, color=COLOR_MAIN), view=BlackjackRoomView(interaction.client))
         await interaction.followup.send(f"✅ Стол накрыт: {thread.mention}", ephemeral=True)
 
     @discord.ui.button(label="💡 Викторина", style=discord.ButtonStyle.success, custom_id="shop_quiz_v2", row=3)
