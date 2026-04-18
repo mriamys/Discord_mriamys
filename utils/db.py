@@ -1,7 +1,7 @@
 import aiomysql
 import logging
 import asyncio
-from config import DB_CONFIG
+from config import DB_HOST, DB_USER, DB_PASS, DB_NAME
 
 class Database:
     def __init__(self):
@@ -10,11 +10,11 @@ class Database:
     async def connect(self):
         try:
             self.pool = await aiomysql.create_pool(
-                host=DB_CONFIG['host'],
-                port=DB_CONFIG['port'],
-                user=DB_CONFIG['user'],
-                password=DB_CONFIG['password'],
-                db=DB_CONFIG['database'],
+                host=DB_HOST,
+                port=3306,
+                user=DB_USER,
+                password=DB_PASS,
+                db=DB_NAME,
                 autocommit=True,
                 cursorclass=aiomysql.DictCursor
             )
