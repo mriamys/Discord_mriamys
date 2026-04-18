@@ -102,13 +102,20 @@ class Database:
 
                 # Таблица достижений
                 await cur.execute('''
-                    CREATE TABLE IF NOT EXISTS achievements (
+                    CREATE TABLE IF NOT EXISTS user_achievements (
                         user_id VARCHAR(25),
                         achievement_id VARCHAR(50),
-                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        PRIMARY KEY (user_id, achievement_id)
+                        date_earned DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY(user_id, achievement_id),
+                        FOREIGN KEY(user_id) REFERENCES users(user_id)
                     )
                 ''')
+                
+                # Миграция из временной таблицы achievements в user_achievements
+                try:
+                    await cur.execute("INSERT IGNORE INTO user_achievements (user_id, achievement_id, date_earned) SELECT user_id, achievement_id, timestamp FROM achievements")
+                except:
+                    pass
 
     async def get_setting(self, key: str, default=None):
         async with self.pool.acquire() as conn:
@@ -146,7 +153,12 @@ class Database:
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 try:
-                    await cur.execute("INSERT INTO achievements (user_id, achievement_id) VALUES (%s, %s)", (user_id, ach_id))
+                    # Попытаемся скопировать старые ачивки, если они были сохранены в ошибочную таблицу
+                    try:
+                        await cur.execute("INSERT IGNORE INTO user_achievements (user_id, achievement_id, date_earned) SELECT user_id, achievement_id, timestamp FROM achievements")
+                    except: pass
+                    
+                    await cur.execute("INSERT INTO user_achievements (user_id, achievement_id) VALUES (%s, %s)", (user_id, ach_id))
                     return True
                 except:
                     return False
@@ -154,7 +166,7 @@ class Database:
     async def get_achievements(self, user_id: str):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT achievement_id FROM achievements WHERE user_id = %s", (user_id,))
+                await cur.execute("SELECT achievement_id FROM user_achievements WHERE user_id = %s", (user_id,))
                 res = await cur.fetchall()
                 return [row['achievement_id'] for row in res]
 
