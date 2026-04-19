@@ -112,6 +112,7 @@ class ShopView(View):
             await interaction.followup.send("❌ Мало коинов!", ephemeral=True); return
         await db.update_user(str(interaction.user.id), vibecoins=u_data['vibecoins'] - 2500, xp_boost_until=datetime.utcnow() + timedelta(hours=2))
         await interaction.followup.send("⚡ Буст x2 на 2 часа куплен!", ephemeral=True)
+        interaction.client.dispatch("shop_purchased", interaction.user, "xp_boost", u_data['vibecoins'] - 2500, u_data.get('nick_changes', 0))
 
     @discord.ui.button(label="🔊 Мемы (2k)", style=discord.ButtonStyle.secondary, custom_id="shop_voice_meme", row=0)
     async def buy_meme(self, interaction, button):
@@ -121,6 +122,11 @@ class ShopView(View):
             await interaction.followup.send("❌ Мало коинов!", ephemeral=True); return
         await db.update_user(str(interaction.user.id), vibecoins=u_data['vibecoins'] - 2000, voice_memes_until=datetime.utcnow() + timedelta(hours=1), voice_memes_count=0)
         await interaction.followup.send("🔊 Мемы заказаны на 1 час!", ephemeral=True)
+        
+        # Передаем ивент для AudioMemes
+        interaction.client.dispatch("voice_meme_purchased", interaction.user, interaction.user.voice.channel if interaction.user.voice else None)
+        # И для квеста/ачивок
+        interaction.client.dispatch("shop_purchased", interaction.user, "voice_meme", u_data['vibecoins'] - 2000, u_data.get('nick_changes', 0))
 
     @discord.ui.button(label="🎰 Казино", style=discord.ButtonStyle.success, custom_id="shop_casino", row=1)
     async def go_casino(self, interaction, button):

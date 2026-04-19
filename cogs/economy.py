@@ -15,9 +15,44 @@ class Economy(commands.Cog):
         self.voice_sessions = {}  # {user_id: join_timestamp}
         self.msg_cooldowns = {}   # {user_id: last_msg_timestamp}
         self.save_voice_sessions.start()
+        self.check_boost_expirations.start()
 
     def cog_unload(self):
         self.save_voice_sessions.cancel()
+        self.check_boost_expirations.cancel()
+
+    @tasks.loop(minutes=2)
+    async def check_boost_expirations(self):
+        expired = await db.get_expired_boosts()
+        for row in expired:
+            user_id = row['user_id']
+            # Чистим в БД сразу, чтобы не слать по 100 раз если что-то упадет
+            await db.update_user(user_id, xp_boost_until=None)
+            
+            # Ищем юзера в гильдиях для уведомления
+            member = None
+            guild = None
+            for g in self.bot.guilds:
+                member = g.get_member(int(user_id))
+                if member:
+                    guild = g
+                    break
+            
+            if member and guild:
+                embed = discord.Embed(
+                    title="⚡ Буст опыта x2 завершен",
+                    description=f"{member.mention}, твой бонусный опыт закончился. Возвращаемся к обычным рейтам! 📉",
+                    color=0xFFD700
+                )
+                
+                chan = discord.utils.get(guild.text_channels, name="📜┃ранг")
+                try:
+                    if chan:
+                        await chan.send(content=member.mention, embed=embed)
+                    else:
+                        await member.send(embed=embed)
+                except Exception:
+                    pass
 
     @tasks.loop(minutes=2)
     async def save_voice_sessions(self):
