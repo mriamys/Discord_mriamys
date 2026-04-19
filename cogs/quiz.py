@@ -7,78 +7,72 @@ import aiohttp
 import html
 import time
 from utils.db import db
-
+from deep_translator import GoogleTranslator
 from config import COLOR_MAIN, COLOR_SUCCESS, COLOR_ERROR
 
-# Источник профессиональных вопросов (Multiple Choice)
-# Используем качественный репозиторий с уже готовыми вариантами ответов
-QUIZ_DATA_URL = "https://raw.githubusercontent.com/PiterPy/trivia-questions-russian/master/questions.json"
+translator = GoogleTranslator(source='en', target='ru')
+
+# Источник вопросов: Open Trivia DB (API)
+OTDB_URL = "https://opentdb.com/api.php?amount=10&type=multiple"
 
 _questions_cache = []
-_used_indices = set()
-
-async def load_quiz_database():
-    global _questions_cache
-    if _questions_cache: return True
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    try:
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(QUIZ_DATA_URL, timeout=30) as resp:
-                if resp.status == 200:
-                    data = await resp.json(content_type=None)
-                    # Формат: [{"question": "...", "all_answers": ["...", "..."], "correct_answer": "..."}]
-                    # Или аналогичный. Мы приведем к единому виду.
-                    valid_data = []
-                    for item in data:
-                        q = item.get('question')
-                        # В разных базах ключи могут отличаться, проверяем популярные
-                        correct = item.get('correct_answer') or item.get('answer')
-                        incorrect = item.get('incorrect_answers') or item.get('options')
-                        
-                        if q and correct and incorrect:
-                            # Если 'incorrect' это полный список (включая правильный), убираем правильный для логики
-                            options = list(incorrect)
-                            if correct not in options: options.append(correct)
-                            
-                            if len(options) >= 2:
-                                valid_data.append({
-                                    "q": html.unescape(q),
-                                    "a": html.unescape(correct),
-                                    "o": [html.unescape(o) for o in options]
-                                })
-                    
-                    if valid_data:
-                        _questions_cache = valid_data
-                        random.shuffle(_questions_cache)
-                        return True
-    except: pass
-    return False
 
 async def fetch_question():
-    global _questions_cache, _used_indices
-    if not _questions_cache:
-        success = await load_quiz_database()
-        if not success:
-            # Фолбэк на хардкод, если сеть упала
-            return {
-                "q": "Какая планета самая большая в Солнечной системе?",
-                "a": "Юпитер",
-                "o": ["Марс", "Сатурн", "Нептун", "Юпитер"]
-            }
+    global _questions_cache
     
-    for _ in range(100):
-        idx = random.randint(0, len(_questions_cache) - 1)
-        if idx not in _used_indices:
-            _used_indices.add(idx)
-            if len(_used_indices) >= len(_questions_cache) - 50: _used_indices.clear()
-            
-            data = _questions_cache[idx]
-            # Перемешиваем варианты перед выдачей
-            opts = list(data['o'])
-            random.shuffle(opts)
-            return {"q": data['q'], "a": data['a'], "o": opts}
-            
-    return _questions_cache[0]
+    # Если кэш пуст, загружаем новую порцию
+    if not _questions_cache:
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(OTDB_URL, timeout=10) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get('results'):
+                            _questions_cache = data['results']
+            except Exception as e:
+                print(f"[Quiz] Error fetching from OTDB: {e}")
+    
+    if not _questions_cache:
+        # Фолбэк если API недоступен
+        return {
+            "q": "Какая планета самая большая в Солнечной системе?",
+            "a": "Юпитер",
+            "o": ["Марс", "Сатурн", "Нептун", "Юпитер"]
+        }
+    
+    raw_q = _questions_cache.pop(0)
+    
+    # Перевод вопроса и ответов
+    try:
+        q_text = html.unescape(raw_q['question'])
+        correct_a = html.unescape(raw_q['correct_answer'])
+        incorrect_as = [html.unescape(a) for a in raw_q['incorrect_answers']]
+        
+        # Переводим всё разом для экономии времени (через разделитель)
+        to_translate = [q_text, correct_a] + incorrect_as
+        translated = translator.translate_batch(to_translate)
+        
+        q_translated = translated[0]
+        a_translated = translated[1]
+        opts_translated = translated[1:] # Правильный + неправильные
+        
+        random.shuffle(opts_translated)
+        
+        return {
+            "q": q_translated,
+            "a": a_translated,
+            "o": opts_translated
+        }
+    except Exception as e:
+        print(f"[Quiz] Translation error: {e}")
+        # Если перевод упал, отдаем оригинал (или фолбэк)
+        opts = [html.unescape(raw_q['correct_answer'])] + [html.unescape(a) for a in raw_q['incorrect_answers']]
+        random.shuffle(opts)
+        return {
+            "q": html.unescape(raw_q['question']),
+            "a": html.unescape(raw_q['correct_answer']),
+            "o": opts
+        }
 
 class QuizView(View):
     def __init__(self, bot, member, q_data):
@@ -121,7 +115,7 @@ class QuizView(View):
         new_q = await fetch_question()
         new_v = QuizView(self.bot, self.member, new_q)
         new_msg = await self.message.channel.send(
-            content=f"{self.member.mention} 💡 **Следующий вопрос!** (Вход свободный, ошибка: -200 🪙)", 
+            content=f"{self.member.mention} 💡 **Следующий вопрос!** (Ошибка: -200 🪙)", 
             embed=await new_v.create_embed(), 
             view=new_v
         )
@@ -382,6 +376,8 @@ class QuizRoomView(View):
 class Quiz(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.bot.add_view(QuizRoomView(bot))
 
-async def setup(bot): await bot.add_cog(Quiz(bot))
+async def setup(bot):
+    cog = Quiz(bot)
+    await bot.add_cog(cog)
+    bot.add_view(QuizRoomView(bot))

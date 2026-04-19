@@ -6,3 +6,4 @@ easy-pil
 python-dotenv
 aiohttp
 PyNaCl
+deep-translator
