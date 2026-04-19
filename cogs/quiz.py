@@ -352,19 +352,24 @@ class QuizRoomView(View):
     def __init__(self, bot):
         super().__init__(timeout=None)
         self.bot = bot
+        self._busy = False
 
     @discord.ui.button(label="💡 Играть Соло (Бесплатно)", style=discord.ButtonStyle.primary, custom_id="quiz_solo_btn")
     async def solo(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.defer()
+        if self._busy: return
+        self._busy = True
+        
+        try: await interaction.message.delete()
+        except: pass
+
         q = await fetch_question()
         view = QuizView(self.bot, interaction.user, q)
         msg = await interaction.channel.send(content=f"{interaction.user.mention} 💡 **Викторина началась!** Ошибка = -200 🪙", embed=await view.create_embed(), view=view)
         view.message = msg
-        try: await interaction.message.delete()
-        except: pass
 
     @discord.ui.button(label="⚔️ Дуэль (На коины)", style=discord.ButtonStyle.success, custom_id="quiz_duel_btn")
     async def invite(self, interaction: discord.Interaction, button: Button):
+        if self._busy: return
         await interaction.response.send_message("💰 Выберите ставку за неверный ответ:", view=QuizBetView(self.bot), ephemeral=True)
 
     @discord.ui.button(label="❌ Закрыть руму", style=discord.ButtonStyle.danger, custom_id="quiz_close_btn")
