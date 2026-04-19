@@ -313,8 +313,18 @@ class QuizRoomView(View):
         except: pass
 
 class Quiz(commands.Cog):
-    def __init__(self, bot): self.bot = bot
+    def __init__(self, bot):
+        self.bot = bot
+        print("[Quiz] Cog initialized")
+
 async def setup(bot):
-    cog = Quiz(bot)
-    await bot.add_cog(cog)
-    bot.add_view(QuizRoomView(bot))
+    try:
+        cog = Quiz(bot)
+        await bot.add_cog(cog)
+        # Регистрируем View для обработки кнопок даже после рестарта
+        bot.add_view(QuizRoomView(bot))
+        print("[Quiz] Cog and View loaded successfully")
+    except Exception as e:
+        print(f"[Quiz] Critical error in setup: {e}")
+        import logging
+        logging.error(f"Failed to setup Quiz cog: {e}")

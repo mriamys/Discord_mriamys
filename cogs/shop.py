@@ -170,16 +170,35 @@ class ShopView(View):
     @discord.ui.button(label="💡 Викторина", style=discord.ButtonStyle.success, custom_id="shop_quiz", row=2)
     async def go_quiz(self, interaction, button):
         existing = await self._check_existing_thread(interaction, "викторина-")
-        if existing: await interaction.response.send_message(f"❌ Ты не закончил викторину: {existing.mention}", ephemeral=True); return
+        if existing: 
+            await interaction.response.send_message(f"❌ Ты не закончил викторину: {existing.mention}", ephemeral=True)
+            return
+            
         await interaction.response.defer(ephemeral=True)
-        thread = await interaction.channel.create_thread(name=f"💡┃викторина-{interaction.user.name[:10]}", type=discord.ChannelType.private_thread)
-        await thread.add_user(interaction.user)
-        if interaction.guild.owner: await thread.add_user(interaction.guild.owner)
-        from cogs.quiz import QuizRoomView
-        desc = "**Правила:**\n🔹 Соло: бесконечный рандом.\n🔹 Дуэль: кто первый нажал - забирает банк!"
-        await thread.send(embed=discord.Embed(title="💡 ВИКТОРИНА", description=desc, color=COLOR_MAIN), view=QuizRoomView(interaction.client))
-        await interaction.followup.send(f"✅ Готово: {thread.mention}", ephemeral=True)
-        self._start_cleanup_task(thread)
+        try:
+            thread = await interaction.channel.create_thread(
+                name=f"💡┃викторина-{interaction.user.name[:10]}", 
+                type=discord.ChannelType.private_thread,
+                invitable=False
+            )
+            await thread.add_user(interaction.user)
+            if interaction.guild.owner:
+                try: await thread.add_user(interaction.guild.owner)
+                except: pass
+            
+            from cogs.quiz import QuizRoomView
+            desc = "**Правила:**\n🔹 Соло: бесконечный рандом.\n🔹 Дуэль: кто первый нажал - забирает банк!"
+            
+            await thread.send(
+                embed=discord.Embed(title="💡 ВИКТОРИНА", description=desc, color=COLOR_MAIN), 
+                view=QuizRoomView(interaction.client)
+            )
+            await interaction.followup.send(f"✅ Готово: {thread.mention}", ephemeral=True)
+            self._start_cleanup_task(thread)
+        except Exception as e:
+            import logging
+            logging.error(f"Error creating quiz thread: {e}")
+            await interaction.followup.send(f"❌ Ошибка при создании ветки: {e}", ephemeral=True)
 
 # ─── SHOP COG ─────────────────────────────────────────────────────────────────
 
