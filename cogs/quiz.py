@@ -114,7 +114,8 @@ class QuizBtn(Button):
     async def callback(self, interaction: discord.Interaction):
         v = self.view
         if interaction.user.id != v.member.id or v.ended: return
-        v.ended, v.stop() = True, True
+        v.ended = True
+        v.stop()
         for c in v.children: 
             if isinstance(c, Button) and c.label != "Закончить игру":
                 c.disabled = True
@@ -207,7 +208,8 @@ class QuizDuelBtn(Button):
         if interaction.user.id in v.players_wrong:
             await interaction.response.send_message("❌ Ты уже ошибся!", ephemeral=True); return
         if self.correct:
-            v.ended, v.stop() = True, True
+            v.ended = True
+            v.stop()
             loser_id = v.p1.id if interaction.user.id == v.p2.id else v.p2.id
             w_data = await db.get_user(str(interaction.user.id))
             l_data = await db.get_user(str(loser_id))
@@ -225,7 +227,8 @@ class QuizDuelBtn(Button):
             v.players_wrong.add(interaction.user.id)
             self.style, self.disabled = discord.ButtonStyle.danger, True
             if len(v.players_wrong) >= len(v.p_ids):
-                v.ended, v.stop() = True, True
+                v.ended = True
+                v.stop()
                 for pid in v.p_ids:
                     u = await db.get_user(str(pid))
                     await db.update_user(str(pid), vibecoins=max(0, u['vibecoins'] - v.bet))
