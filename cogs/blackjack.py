@@ -315,4 +315,22 @@ class Blackjack(commands.Cog):
         self.bot = bot
         self.bot.add_view(BlackjackRoomView(bot))
 
+    @commands.command(name="bj_setup", aliases=["блэкджек", "bj"])
+    @commands.has_permissions(administrator=True)
+    async def setup_blackjack(self, ctx):
+        """Создаёт панель для игры в Блэкджек (только для админов)."""
+        embed = discord.Embed(
+            title="🃏 ИГРОВОЙ СТОЛ: БЛЭКДЖЕК",
+            description=(
+                "Добро пожаловать в элитный клуб! Здесь вы можете испытать удачу в классической игре.\n\n"
+                "🔹 **Соло:** Играйте против дилера с множителем до **2.5x**!\n"
+                "🔹 **Дуэль:** Вызовите друга на честный поединок.\n\n"
+                "*Помните: казино всегда в плюсе... или нет?*"
+            ),
+            color=0x2b2d31
+        )
+        embed.set_image(url="https://media.giphy.com/media/l41lUj8pB7S4N4bba/giphy.gif")
+        await ctx.send(embed=embed, view=BlackjackRoomView(self.bot))
+        await ctx.message.delete()
+
 async def setup(bot): await bot.add_cog(Blackjack(bot))
