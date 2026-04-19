@@ -312,8 +312,12 @@ class QuizRoomView(View):
         await interaction.response.send_message("💰 Выберите ставку за неверный ответ:", view=QuizBetView(self.bot, mode="duel"), ephemeral=True)
     @discord.ui.button(label="❌ Закрыть руму", style=discord.ButtonStyle.danger, custom_id="quiz_close_btn")
     async def exit(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_message("🚪 Комната закрывается..."); await asyncio.sleep(1); try: await interaction.channel.delete()
-        except: pass
+        await interaction.response.send_message("🚪 Комната закрывается...")
+        await asyncio.sleep(1)
+        try:
+            await interaction.channel.delete()
+        except:
+            pass
 
 class Quiz(commands.Cog):
     def __init__(self, bot):
