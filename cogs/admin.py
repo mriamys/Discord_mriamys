@@ -13,46 +13,37 @@ class Admin(commands.Cog):
     async def adminhelp(self, ctx):
         embed = discord.Embed(
             title="🛠 ПАНЕЛЬ АДМИНИСТРАТОРА",
-            description="Список команд, доступных только пользователям с правами администратора.",
+            description="Ниже приведен полный список команд для настройки и управления сервером.\nВсе команды поддерживают `/` и `!`.",
             color=COLOR_MAIN
         )
         
         embed.add_field(
-            name="💰 Экономика",
-            value="`/give-money <user> <amount>` — Выдать VibeКоины пользователю.",
+            name="💰 Экономика и Магазин",
+            value="`/give-money <user> <amount>` — Выдать VibeКоины (Owner only).\n"
+                  "`/setup_shop` — Инициализировать канал магазина.\n"
+                  "`/clear_threads` — Удалить все игровые комнаты (ветки) в канале.",
             inline=False
         )
         
         embed.add_field(
             name="🎲 Игровые Панели",
-            value="`!казик` — Создать панель управления Казино.\n"
-                  "`!bj_setup` — Создать панель управления Блэкджеком.",
+            value="`/казик` — Создать панель управления Казино.\n"
+                  "`/bj_setup` — Создать панель управления Блэкджеком.",
             inline=False
         )
         
         embed.add_field(
-            name="🛒 Настройка Магазина и Ролей",
-            value="`!setup_shop` — Инициализировать канал магазина.\n"
-                  "`!setup_roles` — Инициализировать панель выбора ролей.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🔊 Голосовые Каналы",
-            value="`!setup_dynamic_voice` — Настроить систему динамических приваток.",
+            name="🎭 Роли и Голос",
+            value="`/setup_roles` — Создать панель выбора ролей (Игры/IT).\n"
+                  "`/setup_dynamic_voice` — Настроить систему динамических приваток.",
             inline=False
         )
 
         # Безопасное получение аватарки
         avatar_url = ctx.author.display_avatar.url if ctx.author.avatar else None
-        embed.set_footer(text=f"Запросил: {ctx.author.display_name}", icon_url=avatar_url)
+        embed.set_footer(text=f"Администратор: {ctx.author.display_name}", icon_url=avatar_url)
 
-        try:
-            # Для слеш-команд будет ephemeral=True, для текстовых бот просто отправит embed
-            await ctx.send(embed=embed, ephemeral=True)
-        except discord.errors.HTTPException:
-            # Fallback для текстовых каналов, если ephemeral не поддерживается
-            await ctx.send(embed=embed)
+        await ctx.send(embed=embed, ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Admin(bot))
