@@ -91,7 +91,7 @@ class ShopView(View):
 
     def _start_cleanup_task(self, thread):
         async def _delete_thread():
-            await asyncio.sleep(1800)
+            await asyncio.sleep(300) # 5 минут вместо 30
             try: await thread.delete()
             except: pass
         asyncio.create_task(_delete_thread())

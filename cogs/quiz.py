@@ -10,83 +10,75 @@ from utils.db import db
 
 from config import COLOR_MAIN, COLOR_SUCCESS, COLOR_ERROR
 
-# Огромная интернет-база (RuBQ Test Set - 2300+ вопросов)
-RUBQ_URL = "https://raw.githubusercontent.com/vladislavneon/RuBQ/master/RuBQ_2.0/RuBQ_2.0_test.json"
+# Источник профессиональных вопросов (Multiple Choice)
+# Используем качественный репозиторий с уже готовыми вариантами ответов
+QUIZ_DATA_URL = "https://raw.githubusercontent.com/PiterPy/trivia-questions-russian/master/questions.json"
 
 _questions_cache = []
-_questions_by_bin = {"year": [], "number": [], "entity": [], "other": []}
 _used_indices = set()
 
-def get_answer_bin(text):
-    text = str(text).strip()
-    if text.isdigit():
-        if len(text) == 4: return "year"
-        return "number"
-    if text and text[0].isupper(): return "entity"
-    return "other"
-
 async def load_quiz_database():
-    global _questions_cache, _questions_by_bin
+    global _questions_cache
     if _questions_cache: return True
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
         async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(RUBQ_URL, timeout=30) as resp:
+            async with session.get(QUIZ_DATA_URL, timeout=30) as resp:
                 if resp.status == 200:
                     data = await resp.json(content_type=None)
-                    valid_data = [item for item in data if item.get('question_text') and item.get('answer_text')]
+                    # Формат: [{"question": "...", "all_answers": ["...", "..."], "correct_answer": "..."}]
+                    # Или аналогичный. Мы приведем к единому виду.
+                    valid_data = []
+                    for item in data:
+                        q = item.get('question')
+                        # В разных базах ключи могут отличаться, проверяем популярные
+                        correct = item.get('correct_answer') or item.get('answer')
+                        incorrect = item.get('incorrect_answers') or item.get('options')
+                        
+                        if q and correct and incorrect:
+                            # Если 'incorrect' это полный список (включая правильный), убираем правильный для логики
+                            options = list(incorrect)
+                            if correct not in options: options.append(correct)
+                            
+                            if len(options) >= 2:
+                                valid_data.append({
+                                    "q": html.unescape(q),
+                                    "a": html.unescape(correct),
+                                    "o": [html.unescape(o) for o in options]
+                                })
+                    
                     if valid_data:
                         _questions_cache = valid_data
-                        for item in _questions_cache:
-                            b = get_answer_bin(item['answer_text'])
-                            _questions_by_bin[b].append(item['answer_text'])
                         random.shuffle(_questions_cache)
                         return True
     except: pass
     return False
 
 async def fetch_question():
-    global _questions_cache, _used_indices, _questions_by_bin
-    if not _questions_cache: await load_quiz_database()
+    global _questions_cache, _used_indices
+    if not _questions_cache:
+        success = await load_quiz_database()
+        if not success:
+            # Фолбэк на хардкод, если сеть упала
+            return {
+                "q": "Какая планета самая большая в Солнечной системе?",
+                "a": "Юпитер",
+                "o": ["Марс", "Сатурн", "Нептун", "Юпитер"]
+            }
     
-    if _questions_cache:
-        for _ in range(100):
-            idx = random.randint(0, len(_questions_cache) - 1)
-            if idx not in _used_indices:
-                _used_indices.add(idx)
-                if len(_used_indices) >= len(_questions_cache) - 10: _used_indices.clear()
-                
-                q = _questions_cache[idx]
-                correct = html.unescape(q['answer_text'])
-                q_text = html.unescape(q['question_text'])
-                
-                # Подбираем похожие по типу ответы
-                bin_name = get_answer_bin(correct)
-                possible_fakes = _questions_by_bin[bin_name]
-                
-                if len(possible_fakes) < 10: # Если мало в бине, берем отовсюду
-                    possible_fakes = [item['answer_text'] for item in _questions_cache]
-                
-                incorrect = []
-                # Пытаемся набрать 3 уникальных фейка
-                attempts = 0
-                while len(incorrect) < 3 and attempts < 100:
-                    attempts += 1
-                    fake = html.unescape(random.choice(possible_fakes))
-                    if fake.lower() != correct.lower() and fake not in incorrect:
-                        incorrect.append(fake)
-                
-                # Если все еще не хватает, добираем из общего пула
-                while len(incorrect) < 3:
-                    fake = html.unescape(random.choice(_questions_cache)['answer_text'])
-                    if fake.lower() != correct.lower() and fake not in incorrect:
-                        incorrect.append(fake)
-                        
-                options = incorrect + [correct]
-                random.shuffle(options)
-                return {"q": q_text, "a": correct, "o": options}
-                
-    return {"q": "Как называется столица Франции?", "a": "Париж", "o": ["Марсель", "Лион", "Ницца", "Париж"]}
+    for _ in range(100):
+        idx = random.randint(0, len(_questions_cache) - 1)
+        if idx not in _used_indices:
+            _used_indices.add(idx)
+            if len(_used_indices) >= len(_questions_cache) - 50: _used_indices.clear()
+            
+            data = _questions_cache[idx]
+            # Перемешиваем варианты перед выдачей
+            opts = list(data['o'])
+            random.shuffle(opts)
+            return {"q": data['q'], "a": data['a'], "o": opts}
+            
+    return _questions_cache[0]
 
 class QuizView(View):
     def __init__(self, bot, member, q_data):
