@@ -153,7 +153,7 @@ class QuizBtn(Button):
         
         data = await db.get_user(str(v.member.id))
         if self.correct:
-            reward = random.randint(350, 600)
+            reward = random.randint(300, 800)
             await db.update_user(str(v.member.id), vibecoins=data['vibecoins'] + reward, quiz_correct=data.get('quiz_correct', 0) + 1)
             await interaction.response.edit_message(content=f"✅ **ВЕРНО!** Ты заработал **{reward} 🪙**", embed=await v.create_embed(status=f"Правильно: `{v.q['a']}`\nПриз: **+{reward} 🪙**", color=COLOR_SUCCESS), view=v)
         else:

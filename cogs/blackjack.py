@@ -156,8 +156,13 @@ class BlackjackView(View):
         user_data = await db.get_user(str(self.member.id))
         
         payout = 0
-        if self.game.status == "player_win": payout = self.bet
-        elif self.game.status in ["dealer_win", "bust"]: payout = -self.bet
+        if self.game.status == "player_win": 
+            # Рандомный множитель выигрыша от 1.1 до 2.5 (чистая прибыль)
+            multiplier = random.uniform(1.1, 2.5)
+            payout = int(self.bet * multiplier)
+            self.game.win_amount = payout # Сохраняем для отображения
+        elif self.game.status in ["dealer_win", "bust"]: 
+            payout = -self.bet
             
         new_balance = max(0, user_data.get('vibecoins', 0) + payout)
         await db.update_user(str(self.member.id), vibecoins=new_balance, bj_wins=user_data.get('bj_wins', 0) + (1 if self.game.status == "player_win" else 0))
