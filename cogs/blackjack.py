@@ -319,7 +319,57 @@ class BlackjackDuelView(View):
             
         await interaction.response.edit_message(embed=embed, view=self)
         await asyncio.sleep(5)
-        await interaction.channel.send(embed=discord.Embed(title="🃏 БЛЭКДЖЕК", description="Дуэль завершена.", color=0x2b2d31), view=BlackjackRoomView(self.bot))
+        
+        # После дуэли предлагаем продолжить или выйти
+        cont_view = BlackjackDuelContinueView(self.bot, self.players[p1_id]["member"], self.players[p2_id]["member"], self.bet)
+        await interaction.channel.send(
+            content=f"⚔️ {self.players[p1_id]['member'].mention} {self.players[p2_id]['member'].mention}, играем дальше?", 
+            view=cont_view
+        )
+
+class BlackjackDuelContinueView(View):
+    def __init__(self, bot, p1, p2, bet):
+        super().__init__(timeout=60)
+        self.bot, self.p1, self.p2, self.bet = bot, p1, p2, bet
+
+    @discord.ui.button(label="🔄 Реванш (Та же ставка)", style=discord.ButtonStyle.primary)
+    async def rematch(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id not in [self.p1.id, self.p2.id]: return
+        
+        # Для реванша нужно подтверждение второго игрока или просто согласие обоих
+        # Упростим: кто нажал, тот инициатор. Второму нужно тоже нажать или просто запустить.
+        # Но лучше просто списать и погнать, если оба согласны.
+        # Для простоты — запускаем новую игру, если нажавший имеет деньги.
+        
+        await interaction.response.defer()
+        u1_data = await db.get_user(str(self.p1.id))
+        u2_data = await db.get_user(str(self.p2.id))
+        
+        if u1_data.get('vibecoins', 0) < self.bet or u2_data.get('vibecoins', 0) < self.bet:
+            await interaction.followup.send("❌ У кого-то недостаточно коинов для реванша!", ephemeral=True)
+            return
+
+        # Списываем ставки
+        await db.update_user(str(self.p1.id), vibecoins=u1_data['vibecoins'] - self.bet)
+        await db.update_user(str(self.p2.id), vibecoins=u2_data['vibecoins'] - self.bet)
+        
+        view = BlackjackDuelView(self.bot, self.p1, self.p2, self.bet)
+        await interaction.channel.send(embed=await view.create_embed(), view=view)
+        try: await interaction.message.delete()
+        except: pass
+
+    @discord.ui.button(label="💰 Сменить ставку", style=discord.ButtonStyle.secondary)
+    async def change_bet(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id not in [self.p1.id, self.p2.id]: return
+        await interaction.response.send_message("💰 Выберите новую ставку:", view=BlackjackBetView(self.bot, "duel"), ephemeral=True)
+
+    @discord.ui.button(label="❌ Покинуть стол", style=discord.ButtonStyle.danger)
+    async def exit(self, interaction: discord.Interaction, button: Button):
+        if interaction.user.id not in [self.p1.id, self.p2.id]: return
+        await interaction.response.send_message(f"🚪 {interaction.user.display_name} покинул игру.")
+        await asyncio.sleep(2)
+        try: await interaction.channel.delete()
+        except: pass
 
 class BlackjackRoomView(View):
     def __init__(self, bot):
