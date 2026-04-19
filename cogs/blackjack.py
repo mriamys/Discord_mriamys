@@ -254,38 +254,68 @@ class BlackjackDuelView(View):
         await self.next_turn(interaction)
 
     async def next_turn(self, interaction):
-        idx = self.p_ids.index(self.turn)
-        next_pid = self.p_ids[(idx + 1) % 2]
-        
-        if self.players[next_pid]["status"] == "playing":
-            self.turn = next_pid
+        # Если текущий игрок закончил (bust или stand)
+        if self.players[self.turn]["status"] != "playing":
+            idx = self.p_ids.index(self.turn)
+            
+            # Если это был первый игрок, передаем ход второму
+            if idx == 0:
+                self.turn = self.p_ids[1]
+                # Сразу проверяем, не закончил ли второй (маловероятно здесь, но для надежности)
+                if self.players[self.turn]["status"] == "playing":
+                    await interaction.response.edit_message(embed=await self.create_embed(), view=self)
+                    self.processing = False
+                else:
+                    await self.resolve_winner(interaction)
+            else:
+                # Если второй игрок закончил, вскрываемся
+                await self.resolve_winner(interaction)
+        else:
+            # Если игрок просто взял карту и не перебрал, он продолжает свой ход
             await interaction.response.edit_message(embed=await self.create_embed(), view=self)
             self.processing = False
-        else: 
-            await self.resolve_winner(interaction)
 
     async def resolve_winner(self, interaction):
+        if self.game_over: return
         self.game_over = True
         for child in self.children: child.disabled = True
         
-        scores = {pid: (self.get_score(d["hand"]) if d["status"] != "bust" else -1) for pid, d in self.players.items()}
         p1_id, p2_id = self.p_ids
+        s1 = self.get_score(self.players[p1_id]["hand"])
+        s2 = self.get_score(self.players[p2_id]["hand"])
         
-        winner_id, loser_id = None, None
-        if scores[p1_id] > scores[p2_id]: winner_id, loser_id = p1_id, p2_id
-        elif scores[p2_id] > scores[p1_id]: winner_id, loser_id = p2_id, p1_id
+        # Проверка на перебор
+        b1 = s1 > 21
+        b2 = s2 > 21
+        
+        winner_id = None
+        if b1 and b2:
+            # Оба перебрали - ничья
+            pass
+        elif b1:
+            winner_id = p2_id
+        elif b2:
+            winner_id = p1_id
+        else:
+            if s1 > s2: winner_id = p1_id
+            elif s2 > s1: winner_id = p2_id
             
         embed = await self.create_embed()
         if winner_id:
+            loser_id = p1_id if winner_id == p2_id else p2_id
             winner, loser = self.players[winner_id]["member"], self.players[loser_id]["member"]
             embed.description = f"🏆 **ПОБЕДИТЕЛЬ: {winner.mention}!**\nЗабрал у оппонента: **{self.bet} 🪙**"
             
             w_data = await db.get_user(str(winner_id))
             l_data = await db.get_user(str(loser_id))
-            await db.update_user(str(winner_id), vibecoins=w_data['vibecoins'] + self.bet, bj_wins=w_data.get('bj_wins', 0) + 1)
-            await db.update_user(str(loser_id), vibecoins=max(0, l_data['vibecoins'] - self.bet))
+            # В дуэли ставка уже списана у обоих в shop.py, поэтому победителю отдаем x2
+            await db.update_user(str(winner_id), vibecoins=w_data['vibecoins'] + (self.bet * 2), bj_wins=w_data.get('bj_wins', 0) + 1)
+            # У проигравшего уже списано, ничего не делаем
         else:
-            embed.description = "🤝 **НИЧЬЯ!** Никто не потерял коины."
+            embed.description = "🤝 **НИЧЬЯ!** Ставки возвращены."
+            for pid in self.p_ids:
+                u_data = await db.get_user(str(pid))
+                await db.update_user(str(pid), vibecoins=u_data['vibecoins'] + self.bet)
             
         await interaction.response.edit_message(embed=embed, view=self)
         await asyncio.sleep(5)

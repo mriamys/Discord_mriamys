@@ -43,7 +43,8 @@ async def fetch_question():
         correct_a = html.unescape(raw_q['correct_answer'])
         incorrect_as = [html.unescape(a) for a in raw_q['incorrect_answers']]
         to_translate = [q_text, correct_a] + incorrect_as
-        translated = translator.translate_batch(to_translate)
+        # Перевод может быть медленным и блокирующим, пускаем в потоке
+        translated = await asyncio.to_thread(translator.translate_batch, to_translate)
         q_translated = translated[0]
         a_translated = translated[1]
         opts_translated = translated[1:] 
@@ -246,14 +247,15 @@ class QuizBetModal(discord.ui.Modal):
         self.add_item(self.bet_input)
 
     async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         try:
             bet = int(self.bet_input.value)
             if bet < 10: raise ValueError
         except:
-            await interaction.response.send_message("❌ Введите корректное число!", ephemeral=True); return
+            await interaction.followup.send("❌ Введите корректное число!", ephemeral=True); return
         user_data = await db.get_user(str(interaction.user.id))
         if user_data.get('vibecoins', 0) < bet:
-            await interaction.response.send_message("❌ Мало коинов!", ephemeral=True); return
+            await interaction.followup.send("❌ Мало коинов!", ephemeral=True); return
         if self.mode == "solo":
             q = await fetch_question()
             view = QuizView(self.bot, interaction.user, q, bet)
@@ -261,7 +263,7 @@ class QuizBetModal(discord.ui.Modal):
             view.message = msg
         else:
             from cogs.shop import GameDuelSelectView
-            await interaction.response.send_message(f"💡 Готовим дуэль! Ставка: **{bet} 🪙**", view=GameDuelSelectView(self.bot, interaction.user.id, bet, "quiz"), ephemeral=True)
+            await interaction.followup.send(f"💡 Готовим дуэль! Ставка: **{bet} 🪙**", view=GameDuelSelectView(self.bot, interaction.user.id, bet, "quiz"), ephemeral=True)
 
 class QuizBetView(View):
     def __init__(self, bot, mode="duel"):
@@ -277,9 +279,10 @@ class QuizBetView(View):
     async def bet_custom(self, interaction, button): await interaction.response.send_modal(QuizBetModal(self.bot, self.mode))
 
     async def start(self, interaction, bet):
+        await interaction.response.defer(ephemeral=True)
         user_data = await db.get_user(str(interaction.user.id))
         if user_data.get('vibecoins', 0) < bet:
-            await interaction.response.send_message("❌ Недостаточно коинов!", ephemeral=True); return
+            await interaction.followup.send("❌ Недостаточно коинов!", ephemeral=True); return
         if self.mode == "solo":
             q = await fetch_question()
             view = QuizView(self.bot, interaction.user, q, bet)
@@ -287,7 +290,7 @@ class QuizBetView(View):
             view.message = msg
         else:
             from cogs.shop import GameDuelSelectView
-            await interaction.response.send_message(f"💡 Готовим дуэль! Ставка: **{bet} 🪙**", view=GameDuelSelectView(self.bot, interaction.user.id, bet, "quiz"), ephemeral=True)
+            await interaction.followup.send(f"💡 Готовим дуэль! Ставка: **{bet} 🪙**", view=GameDuelSelectView(self.bot, interaction.user.id, bet, "quiz"), ephemeral=True)
 
 class QuizRoomView(View):
     def __init__(self, bot):
