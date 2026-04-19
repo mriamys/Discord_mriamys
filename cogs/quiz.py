@@ -8,14 +8,25 @@ import html
 import time
 from utils.db import db
 
+from config import COLOR_MAIN, COLOR_SUCCESS, COLOR_ERROR
+
 # Огромная интернет-база (RuBQ Test Set - 2300+ вопросов)
 RUBQ_URL = "https://raw.githubusercontent.com/vladislavneon/RuBQ/master/RuBQ_2.0/RuBQ_2.0_test.json"
 
 _questions_cache = []
+_questions_by_bin = {"year": [], "number": [], "entity": [], "other": []}
 _used_indices = set()
 
+def get_answer_bin(text):
+    text = str(text).strip()
+    if text.isdigit():
+        if len(text) == 4: return "year"
+        return "number"
+    if text and text[0].isupper(): return "entity"
+    return "other"
+
 async def load_quiz_database():
-    global _questions_cache
+    global _questions_cache, _questions_by_bin
     if _questions_cache: return True
     headers = {'User-Agent': 'Mozilla/5.0'}
     try:
@@ -26,27 +37,55 @@ async def load_quiz_database():
                     valid_data = [item for item in data if item.get('question_text') and item.get('answer_text')]
                     if valid_data:
                         _questions_cache = valid_data
+                        for item in _questions_cache:
+                            b = get_answer_bin(item['answer_text'])
+                            _questions_by_bin[b].append(item['answer_text'])
                         random.shuffle(_questions_cache)
                         return True
     except: pass
     return False
 
 async def fetch_question():
-    global _questions_cache, _used_indices
+    global _questions_cache, _used_indices, _questions_by_bin
     if not _questions_cache: await load_quiz_database()
+    
     if _questions_cache:
         for _ in range(100):
             idx = random.randint(0, len(_questions_cache) - 1)
             if idx not in _used_indices:
                 _used_indices.add(idx)
                 if len(_used_indices) >= len(_questions_cache) - 10: _used_indices.clear()
+                
                 q = _questions_cache[idx]
-                correct = q['answer_text']
+                correct = html.unescape(q['answer_text'])
+                q_text = html.unescape(q['question_text'])
+                
+                # Подбираем похожие по типу ответы
+                bin_name = get_answer_bin(correct)
+                possible_fakes = _questions_by_bin[bin_name]
+                
+                if len(possible_fakes) < 10: # Если мало в бине, берем отовсюду
+                    possible_fakes = [item['answer_text'] for item in _questions_cache]
+                
                 incorrect = []
+                # Пытаемся набрать 3 уникальных фейка
+                attempts = 0
+                while len(incorrect) < 3 and attempts < 100:
+                    attempts += 1
+                    fake = html.unescape(random.choice(possible_fakes))
+                    if fake.lower() != correct.lower() and fake not in incorrect:
+                        incorrect.append(fake)
+                
+                # Если все еще не хватает, добираем из общего пула
                 while len(incorrect) < 3:
-                    fake = random.choice(_questions_cache)['answer_text']
-                    if fake.lower() != correct.lower() and fake not in incorrect: incorrect.append(fake)
-                return {"q": html.unescape(q['question_text']), "a": html.unescape(correct), "o": [html.unescape(a) for a in incorrect] + [html.unescape(correct)]}
+                    fake = html.unescape(random.choice(_questions_cache)['answer_text'])
+                    if fake.lower() != correct.lower() and fake not in incorrect:
+                        incorrect.append(fake)
+                        
+                options = incorrect + [correct]
+                random.shuffle(options)
+                return {"q": q_text, "a": correct, "o": options}
+                
     return {"q": "Как называется столица Франции?", "a": "Париж", "o": ["Марсель", "Лион", "Ницца", "Париж"]}
 
 class QuizView(View):
@@ -57,19 +96,20 @@ class QuizView(View):
         self.ended = False
         self.end_timestamp = int(time.time() + 20)
         
-        opts = list(self.q['o'])
-        random.shuffle(opts)
-        for opt in opts:
+        for opt in self.q['o']:
             self.add_item(QuizBtn(label=opt[:80], correct=opt == self.q['a']))
         
         exit_btn = Button(label="Закончить игру", style=discord.ButtonStyle.danger, row=2)
         exit_btn.callback = self._exit_callback
         self.add_item(exit_btn)
 
-    def create_embed(self):
-        embed = discord.Embed(title="🌐 МЕГА-ВИКТОРИНА", description=f"**{self.q['q']}**", color=0x3498db)
-        embed.add_field(name="⏰ Время на ответ", value=f"<t:{self.end_timestamp}:R>", inline=True)
-        embed.set_footer(text=f"Игрок: {self.member.display_name}")
+    async def create_embed(self, status=None, color=COLOR_MAIN):
+        embed = discord.Embed(title="🌐 ВИКТОРИНА", description=f"**{self.q['q']}**", color=color)
+        if status:
+            embed.add_field(name="Результат", value=status, inline=False)
+        else:
+            embed.add_field(name="⏰ Время на ответ", value=f"<t:{self.end_timestamp}:R>", inline=True)
+        embed.set_footer(text=f"Игрок: {self.member.display_name} | Ставка: 100 🪙")
         return embed
 
     async def on_timeout(self):
@@ -78,30 +118,35 @@ class QuizView(View):
         for c in self.children: c.disabled = True
         try:
             if self.message:
-                await self.message.edit(content=f"⏰ **ВРЕМЯ ВЫШЛО!** Правильный ответ: `{self.q['a']}`", embed=None, view=self)
-                await asyncio.sleep(3)
+                await self.message.edit(content=f"⏰ **ВРЕМЯ ВЫШЛО!**\nПравильный ответ: `{self.q['a']}`", embed=None, view=self)
+                await asyncio.sleep(4)
                 await self._next_round()
         except: pass
 
     async def _next_round(self):
-        # Проверка баланса перед новым раундом
+        if self.ended and self.message is None: return # safety
         data = await db.get_user(str(self.member.id))
         if data.get('vibecoins', 0) < 100:
-            await self.message.channel.send(f"❌ {self.member.mention}, коины закончились! Викторина окончена.")
+            await self.message.channel.send(f"❌ {self.member.mention}, у тебя закончились коины! Минимум 100 🪙 для продолжения.")
             await self._return_to_menu()
             return
 
+        # Списание перед вопросом
         await db.update_user(str(self.member.id), vibecoins=data['vibecoins'] - 100)
         new_q = await fetch_question()
         new_v = QuizView(self.bot, self.member, new_q)
-        new_msg = await self.message.channel.send(content=self.member.mention, embed=new_v.create_embed(), view=new_v)
+        new_msg = await self.message.channel.send(
+            content=f"{self.member.mention} 🪙 **-100** (участие)", 
+            embed=await new_v.create_embed(), 
+            view=new_v
+        )
         new_v.message = new_msg
 
     async def _exit_callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.member.id: return
         self.ended = True
         self.stop()
-        await interaction.response.send_message("👋 Заканчиваем...", ephemeral=True)
+        await interaction.response.send_message("👋 Викторина окончена!", ephemeral=True)
         try: await interaction.message.delete()
         except: pass
         await self._return_to_menu()
@@ -120,7 +165,6 @@ class QuizBtn(Button):
         if interaction.user.id != v.member.id or v.ended: return
         v.ended = True
         v.stop() 
-        await interaction.response.defer()
         
         for c in v.children: 
             if isinstance(c, Button) and c.label != "Закончить игру":
@@ -129,43 +173,58 @@ class QuizBtn(Button):
                 elif c.label == self.label: c.style = discord.ButtonStyle.danger
         
         if self.correct:
-            reward = random.randint(300, 600)
+            reward = random.randint(350, 650)
             data = await db.get_user(str(v.member.id))
             await db.update_user(str(v.member.id), vibecoins=data['vibecoins'] + reward, quiz_correct=data.get('quiz_correct', 0) + 1)
-            await interaction.edit_original_response(content=f"✅ **ВЕРНО!** +**{reward} 🪙**", embed=None, view=v)
+            await interaction.response.edit_message(content=f"✅ **ВЕРНО!** Ты заработал **{reward} 🪙**", embed=await v.create_embed(status=f"Правильно: `{v.q['a']}`\nПриз: **+{reward} 🪙**", color=COLOR_SUCCESS), view=v)
         else:
-            await interaction.edit_original_response(content=f"❌ **ОШИБКА!** Правильный ответ: `{v.q['a']}`", embed=None, view=v)
+            await interaction.response.edit_message(content=f"❌ **ОШИБКА!**", embed=await v.create_embed(status=f"Твой ответ: `{self.label}`\nПравильный: `{v.q['a']}`\nТы потерял **100 🪙**", color=COLOR_ERROR), view=v)
         
-        await asyncio.sleep(3)
+        await asyncio.sleep(4)
         await v._next_round()
 
 class QuizDuelView(View):
     def __init__(self, bot, p1, p2, bet, q):
-        super().__init__(timeout=20.0)
-        self.bot, self.players, self.bet, self.q = bot, [p1.id, p2.id], bet, q
+        super().__init__(timeout=25.0)
+        self.bot, self.p_ids = bot, [p1.id, p2.id]
+        self.bet, self.q = bet, q
         self.message = None
         self.ended = False
-        self.end_timestamp = int(time.time() + 20)
-        opts = list(q['o'])
-        random.shuffle(opts)
-        for opt in opts: self.add_item(QuizDuelBtn(label=opt[:80], correct=opt == q['a']))
+        self.players_wrong = set()
+        self.end_timestamp = int(time.time() + 25)
+        
+        for opt in self.q['o']: 
+            self.add_item(QuizDuelBtn(label=opt[:80], correct=opt == q['a']))
 
-    def create_embed(self):
-        embed = discord.Embed(title="⚔️ БИТВА ЗНАТОКОВ", description=f"**{self.q['q']}**", color=0xe74c3c)
+    async def create_embed(self, winner=None, all_failed=False):
+        color = COLOR_MAIN
+        if winner: color = COLOR_SUCCESS
+        elif all_failed: color = COLOR_ERROR
+        
+        embed = discord.Embed(title="⚔️ ДУЭЛЬ ЗНАТОКОВ", description=f"**{self.q['q']}**", color=color)
         embed.add_field(name="💰 Банк", value=f"**{self.bet * 2} 🪙**", inline=True)
-        embed.add_field(name="⏰ Время", value=f"<t:{self.end_timestamp}:R>", inline=True)
+        
+        if winner:
+            embed.add_field(name="🏆 Победитель", value=f"<@{winner}>", inline=False)
+            embed.add_field(name="✅ Ответ", value=f"`{self.q['a']}`", inline=True)
+        elif all_failed:
+            embed.add_field(name="💀 Финал", value="Никто не ответил правильно!", inline=False)
+            embed.add_field(name="✅ Ответ был", value=f"`{self.q['a']}`", inline=True)
+        else:
+            embed.add_field(name="⏰ Время", value=f"<t:{self.end_timestamp}:R>", inline=True)
+            wrong_mentions = ", ".join([f"<@{pid}>" for pid in self.players_wrong]) or "Нет"
+            embed.add_field(name="❌ Ошиблись", value=wrong_mentions, inline=False)
+            
         return embed
 
     async def on_timeout(self):
         if self.ended: return
         self.ended = True
         for c in self.children: c.disabled = True
-        try:
-            if self.message:
-                await self.message.edit(content=f"⏰ **ВРЕМЯ ВЫШЛО!** Ответ: `{self.q['a']}`", embed=None, view=self)
-                await asyncio.sleep(3)
-                await self.message.channel.send(embed=discord.Embed(title="💡 ВИКТОРИНА", description="Дуэль окончена тайм-аутом.", color=0x2ECC71), view=QuizRoomView(self.bot))
-        except: pass
+        if self.message:
+            await self.message.edit(content="⏰ **ВРЕМЯ ВЫШЛО!**", embed=await self.create_embed(all_failed=True), view=self)
+            await asyncio.sleep(5)
+            await self.message.channel.send(embed=discord.Embed(title="💡 ВИКТОРИНА", description="Дуэль окончена тайм-аутом.", color=COLOR_MAIN), view=QuizRoomView(self.bot))
 
 class QuizDuelBtn(Button):
     def __init__(self, label, correct):
@@ -174,22 +233,43 @@ class QuizDuelBtn(Button):
 
     async def callback(self, interaction: discord.Interaction):
         v = self.view
-        if interaction.user.id not in v.players or v.ended: return
+        if interaction.user.id not in v.p_ids or v.ended: return
+        
+        if interaction.user.id in v.players_wrong:
+            await interaction.response.send_message("❌ Ты уже ошибся в этом раунде!", ephemeral=True)
+            return
+
         if self.correct:
             v.ended = True
             v.stop()
             for c in v.children:
                 c.disabled = True
                 if hasattr(c, 'correct') and c.correct: c.style = discord.ButtonStyle.success
+                elif c.label == self.label: c.style = discord.ButtonStyle.danger
+            
             w_data = await db.get_user(str(interaction.user.id))
             await db.update_user(str(interaction.user.id), vibecoins=w_data['vibecoins'] + v.bet * 2, quiz_correct=w_data.get('quiz_correct', 0) + 1)
-            await interaction.response.edit_message(content=f"🏆 **{interaction.user.mention} ПОБЕДИЛ!** Забрал **{v.bet * 2} 🪙**", embed=None, view=v)
-            await asyncio.sleep(3)
-            await interaction.channel.send(embed=discord.Embed(title="💡 ВИКТОРИНА", description="Хотите еще битву?", color=0x2ECC71), view=QuizRoomView(self.bot))
+            await interaction.response.edit_message(content=f"🏆 **{interaction.user.mention} ПОБЕДИЛ!**", embed=await v.create_embed(winner=interaction.user.id), view=v)
+            await asyncio.sleep(5)
+            await interaction.channel.send(embed=discord.Embed(title="💡 ВИКТОРИНА", description="Хотите еще битву?", color=COLOR_MAIN), view=QuizRoomView(self.bot))
         else:
-            await interaction.response.send_message("❌ Неправильно! Ты выбываешь.", ephemeral=True)
-            self.disabled, self.style = True, discord.ButtonStyle.danger
-            await interaction.message.edit(view=v)
+            v.players_wrong.add(interaction.user.id)
+            self.style = discord.ButtonStyle.danger
+            self.disabled = True
+            
+            # Если все игроки ошиблись
+            if len(v.players_wrong) >= len(v.p_ids):
+                v.ended = True
+                v.stop()
+                for c in v.children: 
+                    c.disabled = True
+                    if hasattr(c, 'correct') and c.correct: c.style = discord.ButtonStyle.success
+                await interaction.response.edit_message(content="💀 **НИКТО НЕ ВЫИГРАЛ!**", embed=await v.create_embed(all_failed=True), view=v)
+                await asyncio.sleep(5)
+                await interaction.channel.send(embed=discord.Embed(title="💡 ВИКТОРИНА", description="Все проиграли. Попробуете снова?", color=COLOR_MAIN), view=QuizRoomView(self.bot))
+            else:
+                await interaction.response.edit_message(embed=await v.create_embed(), view=v)
+                await interaction.followup.send("❌ Неправильно! Ты выбываешь до конца раунда.", ephemeral=True)
 
 class QuizRoomView(View):
     def __init__(self, bot):
@@ -205,7 +285,7 @@ class QuizRoomView(View):
         await db.update_user(str(interaction.user.id), vibecoins=data['vibecoins'] - 100)
         q = await fetch_question()
         view = QuizView(self.bot, interaction.user, q)
-        msg = await interaction.channel.send(content=interaction.user.mention, embed=view.create_embed(), view=view)
+        msg = await interaction.channel.send(content=interaction.user.mention, embed=await view.create_embed(), view=view)
         view.message = msg
         try: await interaction.message.delete()
         except: pass
