@@ -61,7 +61,7 @@ class QuizView(View):
         super().__init__(timeout=20.0)
         self.bot, self.member, self.q, self.bet = bot, member, q_data, bet
         self.consecutive_timeouts = consecutive_timeouts
-        self.message, self.ended = None, False
+        self.message, self.ended, self.game_over = None, False, False
         self.end_timestamp = int(time.time() + 20)
         for opt in self.q['o']:
             self.add_item(QuizBtn(label=opt[:80], correct=opt == self.q['a']))
@@ -79,6 +79,7 @@ class QuizView(View):
     async def on_timeout(self):
         if self.ended: return
         self.ended = True
+        self.stop()
         for c in self.children: c.disabled = True
         
         # Списание коинов при тайм-ауте
@@ -90,14 +91,16 @@ class QuizView(View):
             if self.message:
                 await self.message.edit(content=f"⏰ **ВРЕМЯ ВЫШЛО!**\nПравильный ответ: `{self.q['a']}`\nШтраф за бездействие: **-{penalty} 🪙**", embed=None, view=self)
                 await asyncio.sleep(4)
-                await self._next_round(timeouts=self.consecutive_timeouts + 1)
+                if not self.game_over:
+                    await self._next_round(timeouts=self.consecutive_timeouts + 1)
         except: pass
 
     async def _next_round(self, timeouts=0):
-        if self.ended and timeouts == 0: return 
+        if self.game_over: return
         if self.message is None: return
         
         if timeouts >= 2:
+            self.game_over = True
             try: await self.message.channel.send(f"🚫 {self.member.mention}, игра окончена автоматически! Вы не отвечали 2 вопроса подряд.")
             except: pass
             await self._return_to_menu()
@@ -113,6 +116,7 @@ class QuizView(View):
             await interaction.response.send_message("❌ Это не ваша игра!", ephemeral=True)
             return
         self.ended = True
+        self.game_over = True
         self.stop()
         if not interaction.response.is_done():
             await interaction.response.send_message("👋 Викторина окончена!", ephemeral=True)
@@ -136,6 +140,8 @@ class QuizBtn(Button):
             await interaction.response.send_message("❌ Это не ваша игра!", ephemeral=True)
             return
         if v.ended: return
+        v.ended = True
+        v.stop()
         
         for c in v.children: 
             if isinstance(c, Button) and c.label != "Закончить игру":
@@ -157,8 +163,7 @@ class QuizBtn(Button):
             await interaction.response.edit_message(content=f"❌ **ОШИБКА!**", embed=await v.create_embed(status=f"Твой ответ: `{self.label}`\nПравильный: `{v.q['a']}`\nШтраф: **-{penalty} 🪙**", color=COLOR_ERROR), view=v)
         
         await asyncio.sleep(4)
-        if not v.ended:
-            v.stop()
+        if not v.game_over:
             await v._next_round(timeouts=0)
 
 class QuizDuelView(View):
@@ -166,7 +171,7 @@ class QuizDuelView(View):
         super().__init__(timeout=25.0)
         self.bot, self.p1, self.p2, self.p_ids, self.bet, self.q = bot, p1, p2, [p1.id, p2.id], bet, q
         self.consecutive_timeouts = consecutive_timeouts
-        self.message, self.ended, self.players_wrong = None, False, set()
+        self.message, self.ended, self.game_over, self.players_wrong = None, False, False, set()
         self.end_timestamp = int(time.time() + 25)
         for opt in self.q['o']: self.add_item(QuizDuelBtn(label=opt[:80], correct=opt == q['a']))
         exit_btn = Button(label="Закончить дуэль", style=discord.ButtonStyle.danger, row=2)
@@ -196,6 +201,7 @@ class QuizDuelView(View):
     async def on_timeout(self):
         if self.ended: return
         self.ended = True
+        self.stop()
         for c in self.children: c.disabled = True
         if self.message:
             penalty = self.bet
@@ -204,13 +210,15 @@ class QuizDuelView(View):
                 await db.update_user(str(pid), vibecoins=max(0, u['vibecoins'] - penalty))
             await self.message.edit(content="⏰ **ВРЕМЯ ВЫШЛО! Оба оштрафованы!**", embed=await self.create_embed(all_failed=True), view=self)
             await asyncio.sleep(5)
-            await self._next_round(timeouts=self.consecutive_timeouts + 1)
+            if not self.game_over:
+                await self._next_round(timeouts=self.consecutive_timeouts + 1)
 
     async def _next_round(self, timeouts=0):
-        if self.ended and timeouts == 0: return
+        if self.game_over: return
         if self.message is None: return
         
         if timeouts >= 2:
+            self.game_over = True
             try: await self.message.channel.send(f"🚫 Дуэль окончена автоматически! Никто не отвечал 2 раунда подряд.")
             except: pass
             await self._return_to_menu()
@@ -226,6 +234,7 @@ class QuizDuelView(View):
             await interaction.response.send_message("❌ Вы не участвуете в этой дуэли!", ephemeral=True)
             return
         self.ended = True
+        self.game_over = True
         self.stop()
         if not interaction.response.is_done():
             await interaction.response.send_message(f"👋 {interaction.user.display_name} закончил дуэль!", ephemeral=True)
@@ -254,6 +263,8 @@ class QuizDuelBtn(Button):
             await interaction.response.send_message("❌ Ты уже ошибся!", ephemeral=True); return
             
         if self.correct:
+            v.ended = True
+            v.stop()
             for c in v.children:
                 if isinstance(c, Button) and c.label != "Закончить дуэль":
                     c.disabled = True
@@ -271,16 +282,17 @@ class QuizDuelBtn(Button):
             
             await interaction.response.edit_message(content=f"🏆 **{interaction.user.mention} КРАСАВА!**", embed=await v.create_embed(winner=interaction.user.id, loser=loser_id), view=v)
             await asyncio.sleep(5)
-            if not v.ended:
-                v.stop()
+            if not v.game_over:
                 await v._next_round(timeouts=0)
         else:
             v.players_wrong.add(interaction.user.id)
             self.style, self.disabled = discord.ButtonStyle.danger, True
             
-            v.bot.dispatch("quiz_answered", interaction.user, False, 0) # increment handled by db/listeners if needed, but here we just need to notify for quests
+            v.bot.dispatch("quiz_answered", interaction.user, False, 0)
             
             if len(v.players_wrong) >= len(v.p_ids):
+                v.ended = True
+                v.stop()
                 for c in v.children: 
                     if isinstance(c, Button) and c.label != "Закончить дуэль" and hasattr(c, 'correct') and c.correct: c.style = discord.ButtonStyle.success
                     if isinstance(c, Button) and c.label != "Закончить дуэль": c.disabled = True
@@ -291,8 +303,7 @@ class QuizDuelBtn(Button):
                     
                 await interaction.response.edit_message(content="💀 **ОБА ОШИБЛИСЬ! Минус коины.**", embed=await v.create_embed(all_failed=True), view=v)
                 await asyncio.sleep(5)
-                if not v.ended:
-                    v.stop()
+                if not v.game_over:
                     await v._next_round(timeouts=0)
             else:
                 await interaction.response.edit_message(embed=await v.create_embed(), view=v)
@@ -354,17 +365,14 @@ class QuizBetView(View):
 class QuizRoomView(View):
     def __init__(self, bot):
         super().__init__(timeout=None)
-        self.bot, self._busy = bot, False
+        self.bot = bot
     @discord.ui.button(label="💡 Играть Соло (На коины)", style=discord.ButtonStyle.primary, custom_id="quiz_solo_btn")
     async def solo(self, interaction: discord.Interaction, button: Button):
-        if self._busy: return
-        self._busy = True
         try: await interaction.message.delete()
         except: pass
         await interaction.response.send_message("💰 Выберите ставку на каждый вопрос:", view=QuizBetView(self.bot, mode="solo"), ephemeral=True)
     @discord.ui.button(label="⚔️ Дуэль (На коины)", style=discord.ButtonStyle.success, custom_id="quiz_duel_btn")
     async def invite(self, interaction: discord.Interaction, button: Button):
-        if self._busy: return
         await interaction.response.send_message("💰 Выберите ставку за неверный ответ:", view=QuizBetView(self.bot, mode="duel"), ephemeral=True)
     @discord.ui.button(label="❌ Закрыть руму", style=discord.ButtonStyle.danger, custom_id="quiz_close_btn")
     async def exit(self, interaction: discord.Interaction, button: Button):
