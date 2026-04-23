@@ -20,11 +20,15 @@ class GameDuelInviteView(View):
     def __init__(self, bot, challenger_id, target_id, bet, game_type):
         super().__init__(timeout=300)
         self.bot, self.challenger_id, self.target_id, self.bet, self.game_type = bot, challenger_id, target_id, bet, game_type
+        self.accepted = False
 
     @discord.ui.button(label="Принять Вызов", style=discord.ButtonStyle.success, emoji="⚔️")
     async def btn_accept(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.target_id:
             await interaction.response.send_message("❌ Этот вызов не для тебя!", ephemeral=True); return
+        
+        if self.accepted: return
+        self.accepted = True
         
         await interaction.response.defer()
         challenger = interaction.guild.get_member(self.challenger_id)
@@ -91,9 +95,26 @@ class ShopView(View):
 
     def _start_cleanup_task(self, thread):
         async def _delete_thread():
-            await asyncio.sleep(300) # 5 минут вместо 30
-            try: await thread.delete()
-            except: pass
+            while True:
+                await asyncio.sleep(300) # Проверка каждые 5 минут
+                try:
+                    # Проверяем последнее сообщение в истории ветки
+                    async for message in thread.history(limit=1):
+                        delta = (discord.utils.utcnow() - message.created_at).total_seconds()
+                        if delta < 300:
+                            # Если была активность в последние 5 минут, продолжаем ждать
+                            break 
+                        else:
+                            # Если активности нет более 5 минут, удаляем
+                            await thread.delete()
+                            return
+                    else:
+                        # Если сообщений вообще нет
+                        await thread.delete()
+                        return
+                except Exception:
+                    # Если ветка уже удалена или ошибка доступа
+                    return
         asyncio.create_task(_delete_thread())
 
     @discord.ui.button(label="🏷️ Погоняло (1k)", style=discord.ButtonStyle.secondary, custom_id="shop_nick", row=0)
@@ -257,6 +278,7 @@ class NicknameModal(Modal):
             old_nick = self.target.display_name
             await self.target.edit(nick=self.nick_input.value)
             await db.update_user(str(interaction.user.id), vibecoins=user_data['vibecoins'] - 1000)
+            interaction.client.dispatch("shop_purchased", interaction.user, "nickname", 1000, user_data.get('nick_changes', 0) + 1)
             await interaction.followup.send(f"✅ Готово!", ephemeral=True)
             async def _res(): await asyncio.sleep(3600); await self.target.edit(nick=old_nick)
             asyncio.create_task(_res())
@@ -281,6 +303,7 @@ class FakeStatusModal(Modal):
             old_nick = interaction.user.display_name
             await interaction.user.edit(nick=f"{old_nick} | {self.status_input.value}"[:32])
             await db.update_user(str(interaction.user.id), vibecoins=user_data['vibecoins'] - 500)
+            interaction.client.dispatch("shop_purchased", interaction.user, "fake_status", 500, user_data.get('nick_changes', 0) + 1)
             await interaction.followup.send(f"✅ Готово!", ephemeral=True)
             async def _res(): await asyncio.sleep(3600); await interaction.user.edit(nick=old_nick)
             asyncio.create_task(_res())

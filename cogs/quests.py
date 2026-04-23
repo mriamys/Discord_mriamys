@@ -12,16 +12,16 @@ TASK_TEMPLATES = {
     "msg_50": {"name": "Активный оратор", "desc": "Отправить 50 сообщений в чаты сервера.", "target": 50, "type": "messages"},
     "voice_60": {"name": "Голос Разума", "desc": "Провести 60 минут в голосовых каналах.", "target": 60, "type": "voice"},
     "voice_120": {"name": "Собеседник", "desc": "Провести 120 минут в голосовых каналах.", "target": 120, "type": "voice"},
-    "casino_5": {"name": "Азартный малый", "desc": "Сыграть 5 раз в любое казино.", "target": 5, "type": "casino"},
-    "casino_10": {"name": "Лудоман", "desc": "Сыграть 10 раз в любое казино.", "target": 10, "type": "casino"},
-    "duel_2": {"name": "Удачливый боец", "desc": "Одержать победу в 2 дуэлях.", "target": 2, "type": "duels"},
-    "duel_3": {"name": "Мастер меча", "desc": "Одержать победу в 3 дуэлях.", "target": 3, "type": "duels"},
+    "casino_5": {"name": "Азартный малый", "desc": "Сыграть 5 раз в Казино (Слоты, Монетка или Кости).", "target": 5, "type": "casino"},
+    "casino_10": {"name": "Лудоман", "desc": "Сыграть 10 раз в Казино (Слоты, Монетка или Кости).", "target": 10, "type": "casino"},
+    "duel_2": {"name": "Удачливый боец", "desc": "Одержать победу в 2 дуэлях на костях (в комнате дуэлей).", "target": 2, "type": "duels"},
+    "duel_3": {"name": "Мастер меча", "desc": "Одержать победу в 3 дуэлях на костях (в комнате дуэлей).", "target": 3, "type": "duels"},
     "case_2": {"name": "Любитель коробок", "desc": "Открыть 2 любых Vibe-кейса.", "target": 2, "type": "cases"},
     "reply_5": {"name": "Альфа-ответчик", "desc": "Ответить (через Reply) на сообщения 5 участников.", "target": 5, "type": "replies"},
-    "bj_3": {"name": "Карточный долг", "desc": "Выиграть 3 партии в Блэкджек.", "target": 3, "type": "bj_wins"},
-    "bj_5": {"name": "Король стола", "desc": "Выиграть 5 партий в Блэкджек.", "target": 5, "type": "bj_wins"},
-    "quiz_3": {"name": "Всезнайка", "desc": "Верно ответить на 3 вопроса викторины.", "target": 3, "type": "quiz_correct"},
-    "quiz_5": {"name": "Профессор", "desc": "Верно ответить на 5 вопросов викторины.", "target": 5, "type": "quiz_correct"},
+    "bj_3": {"name": "Карточный долг", "desc": "Выиграть 3 партии в Блэкджек (соло против дилера или дуэль).", "target": 3, "type": "bj_wins"},
+    "bj_5": {"name": "Король стола", "desc": "Выиграть 5 партий в Блэкджек (соло против дилера или дуэль).", "target": 5, "type": "bj_wins"},
+    "quiz_3": {"name": "Всезнайка", "desc": "Верно ответить на 3 вопроса викторины (соло или с друзьями).", "target": 3, "type": "quiz_correct"},
+    "quiz_5": {"name": "Профессор", "desc": "Верно ответить на 5 вопросов викторины (соло или с друзьями).", "target": 5, "type": "quiz_correct"},
     "shop_1": {"name": "Шопоголик", "desc": "Купить 1 любой товар в магазине.", "target": 1, "type": "shop_buy"},
     "nick_1": {"name": "Смена личности", "desc": "Сменить ник через магазин 1 раз.", "target": 1, "type": "nick_change"}
 }
@@ -146,8 +146,8 @@ class DailyTasks(commands.Cog):
         await self.check_progress(member, "duels")
 
     @commands.Cog.listener()
-    async def on_case_opened(self, member, *args):
-        await self.check_progress(member, "cases")
+    async def on_case_opened(self, member, cases_count=1):
+        await self.check_progress(member, "cases", cases_count)
 
     @commands.Cog.listener()
     async def on_message_reply_interaction(self, member, replied_to):

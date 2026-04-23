@@ -15,7 +15,7 @@ LEVEL_THEMES = {
     80: "#1f2c39", 85: "#34495e", 90: "#000000", 95: "#7289da", 100: "#ffffff"
 }
 
-async def generate_profile_card(member: discord.Member, level: int, xp: int, vibecoins: int, voice_seconds: int, rank_name: str, bg_color: str = "#2b2d31", user_achievements: list = None, streak: int = 0):
+async def generate_profile_card(member: discord.Member, level: int, xp: int, vibecoins: int, voice_seconds: int, rank_name: str, bg_color: str = "#2b2d31", user_achievements: list = None, streak: int = 0, rank_pos: int = 0):
     if user_achievements is None:
         user_achievements = []
         
@@ -81,6 +81,9 @@ async def generate_profile_card(member: discord.Member, level: int, xp: int, vib
     background.text((start_x, 40), safe_name, font=font_title, color="#ffffff")
     background.text((start_x, 95), f"РАНГ: {safe_rank}", font=font_rank, color=theme_color)
     
+    if rank_pos > 0:
+        background.text((840, 40), f"#{rank_pos}", font=font_title, color=theme_color, align="right")
+        
     if streak > 0:
         streak_text = f"Стрик: {streak}"
         background.text((840, 95), streak_text, font=font_rank, color="#FF5733", align="right")

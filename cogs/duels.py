@@ -26,12 +26,16 @@ class DuelAcceptView(View):
         self.target = target
         self.bet = bet
         self.thread = thread
+        self.accepted = False
 
     @discord.ui.button(label="Принять Вызов", style=discord.ButtonStyle.success, emoji="⚔️")
     async def btn_accept(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.target.id:
             await interaction.response.send_message("❌ Этот вызов не для тебя!", ephemeral=True)
             return
+        
+        if self.accepted: return
+        self.accepted = True
 
         user_data = await db.get_user(str(self.target.id))
         balance = user_data.get('vibecoins', 0)
@@ -253,9 +257,18 @@ class Duels(commands.Cog):
         await thread.send(content=interaction.user.mention, embed=embed, view=DuelRoomView(interaction.user.id))
 
         async def _delete_thread():
-            await asyncio.sleep(1800)
-            try: await thread.delete()
-            except: pass
+            while True:
+                await asyncio.sleep(300) # Проверка каждые 5 минут
+                try:
+                    found_recent = False
+                    async for message in thread.history(limit=1):
+                        if (discord.utils.utcnow() - message.created_at).total_seconds() < 300:
+                            found_recent = True
+                    if not found_recent:
+                        await thread.delete()
+                        return
+                except Exception:
+                    return
         self.bot.loop.create_task(_delete_thread())
 
 async def setup(bot):

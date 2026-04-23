@@ -68,8 +68,9 @@ class LevelUpView(discord.ui.View):
         rank_name = cog.get_rank_role_name_for_level(level) if cog else "Unknown"
         
         user_achievements = await db.get_achievements(str(interaction.user.id))
+        rank_pos = await db.get_user_rank(str(interaction.user.id))
         
-        image_bytes = await generate_profile_card(interaction.user, level, xp, vibecoins, voice_seconds, rank_name, bg_color, user_achievements)
+        image_bytes = await generate_profile_card(interaction.user, level, xp, vibecoins, voice_seconds, rank_name, bg_color, user_achievements, user_data.get('streak', 0), rank_pos)
         
         if isinstance(image_bytes, bytes):
             fp = io.BytesIO(image_bytes)
@@ -392,11 +393,12 @@ class Leveling(commands.Cog):
         bg_color = profile_settings.get("bg_color", "#2b2d31") if profile_settings else "#2b2d31"
         user_achievements = await db.get_achievements(str(member.id))
         streak = user_data.get('streak', 0)
+        rank_pos = await db.get_user_rank(str(member.id))
         
         from utils.images import generate_profile_card
         import io
         
-        image_bytes = await generate_profile_card(member, level, xp, vibecoins, voice_seconds, rank_name, bg_color, user_achievements, streak)
+        image_bytes = await generate_profile_card(member, level, xp, vibecoins, voice_seconds, rank_name, bg_color, user_achievements, streak, rank_pos)
         
         if isinstance(image_bytes, bytes):
             fp = io.BytesIO(image_bytes)

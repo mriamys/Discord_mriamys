@@ -80,9 +80,15 @@ class QuizView(View):
         if self.ended: return
         self.ended = True
         for c in self.children: c.disabled = True
+        
+        # Списание коинов при тайм-ауте
+        data = await db.get_user(str(self.member.id))
+        penalty = self.bet
+        await db.update_user(str(self.member.id), vibecoins=max(0, data['vibecoins'] - penalty))
+        
         try:
             if self.message:
-                await self.message.edit(content=f"⏰ **ВРЕМЯ ВЫШЛО!**\nПравильный ответ: `{self.q['a']}`", embed=None, view=self)
+                await self.message.edit(content=f"⏰ **ВРЕМЯ ВЫШЛО!**\nПравильный ответ: `{self.q['a']}`\nШтраф за бездействие: **-{penalty} 🪙**", embed=None, view=self)
                 await asyncio.sleep(4)
                 await self._next_round(timeouts=self.consecutive_timeouts + 1)
         except: pass
@@ -140,11 +146,14 @@ class QuizBtn(Button):
         data = await db.get_user(str(v.member.id))
         if self.correct:
             reward = int(v.bet * random.uniform(1.1, 2.5))
-            await db.update_user(str(v.member.id), vibecoins=data['vibecoins'] + reward, quiz_correct=data.get('quiz_correct', 0) + 1)
+            new_correct = data.get('quiz_correct', 0) + 1
+            await db.update_user(str(v.member.id), vibecoins=data['vibecoins'] + reward, quiz_correct=new_correct)
+            v.bot.dispatch("quiz_answered", v.member, True, new_correct)
             await interaction.response.edit_message(content=f"✅ **ВЕРНО!** Ты заработал **{reward} 🪙**", embed=await v.create_embed(status=f"Правильно: `{v.q['a']}`\nПриз: **+{reward} 🪙**", color=COLOR_SUCCESS), view=v)
         else:
             penalty = v.bet
             await db.update_user(str(v.member.id), vibecoins=max(0, data['vibecoins'] - penalty))
+            v.bot.dispatch("quiz_answered", v.member, False, data.get('quiz_correct', 0))
             await interaction.response.edit_message(content=f"❌ **ОШИБКА!**", embed=await v.create_embed(status=f"Твой ответ: `{self.label}`\nПравильный: `{v.q['a']}`\nШтраф: **-{penalty} 🪙**", color=COLOR_ERROR), view=v)
         
         await asyncio.sleep(4)
@@ -254,8 +263,11 @@ class QuizDuelBtn(Button):
             loser_id = v.p1.id if interaction.user.id == v.p2.id else v.p2.id
             w_data = await db.get_user(str(interaction.user.id))
             l_data = await db.get_user(str(loser_id))
-            await db.update_user(str(interaction.user.id), vibecoins=w_data['vibecoins'] + v.bet, quiz_correct=w_data.get('quiz_correct', 0) + 1)
+            new_correct = w_data.get('quiz_correct', 0) + 1
+            await db.update_user(str(interaction.user.id), vibecoins=w_data['vibecoins'] + v.bet, quiz_correct=new_correct)
             await db.update_user(str(loser_id), vibecoins=max(0, l_data['vibecoins'] - v.bet))
+            
+            v.bot.dispatch("quiz_answered", interaction.user, True, new_correct)
             
             await interaction.response.edit_message(content=f"🏆 **{interaction.user.mention} КРАСАВА!**", embed=await v.create_embed(winner=interaction.user.id, loser=loser_id), view=v)
             await asyncio.sleep(5)
@@ -265,6 +277,9 @@ class QuizDuelBtn(Button):
         else:
             v.players_wrong.add(interaction.user.id)
             self.style, self.disabled = discord.ButtonStyle.danger, True
+            
+            v.bot.dispatch("quiz_answered", interaction.user, False, 0) # increment handled by db/listeners if needed, but here we just need to notify for quests
+            
             if len(v.players_wrong) >= len(v.p_ids):
                 for c in v.children: 
                     if isinstance(c, Button) and c.label != "Закончить дуэль" and hasattr(c, 'correct') and c.correct: c.style = discord.ButtonStyle.success

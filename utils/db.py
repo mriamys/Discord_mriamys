@@ -170,6 +170,17 @@ class Database:
                 res = await cur.fetchall()
                 return [row['achievement_id'] for row in res]
 
+    async def get_user_rank(self, user_id: str):
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT xp FROM users WHERE user_id = %s", (user_id,))
+                res = await cur.fetchone()
+                if not res: return 0
+                user_xp = res['xp']
+                await cur.execute("SELECT COUNT(*) as rank FROM users WHERE xp > %s", (user_xp,))
+                rank_res = await cur.fetchone()
+                return rank_res['rank'] + 1
+
     async def get_leaderboard(self, category: str, limit: int = 10):
         order_by = "xp DESC"
         if category == "coins":
