@@ -29,16 +29,16 @@ def calculate_score(hand):
         else:
             score += rank
     
-    # Запоминаем изначальный счет с Ace=11
-    original_score = score
     while score > 21 and aces > 0:
         score -= 10
         aces -= 1
     
-    # Если счет изменился из-за тузов, значит у нас есть "мягкий" туз
-    # Мы показываем "мягкий" счет только если он <= 21
-    soft = original_score != score and score <= 21
-    return score, soft, original_score
+    # Рука мягкая, если есть туз, который можно считать за 11
+    soft = aces > 0 and (score + 10 <= 21) # Wait, logic check
+    # Actually if we have ANY ace that is currently 11, it's soft.
+    # In my logic above, 'aces' is the number of aces currently acting as 11.
+    soft = aces > 0
+    return score, soft, score - 10 if soft else score
 
 class BlackjackGame:
     def __init__(self, bet):
@@ -117,19 +117,12 @@ class BlackjackView(View):
     async def create_embed(self):
         user_data = await db.get_user(str(self.member.id))
         balance = user_data.get('vibecoins', 0)
-        p_score, p_soft, p_orig = calculate_score(self.game.player_hand)
+        p_score, p_soft, p_alt = calculate_score(self.game.player_hand)
         
         embed = discord.Embed(title="🃏 БЛЭКДЖЕК (SOLO)", color=0x2b2d31)
         embed.set_author(name=self.member.display_name, icon_url=self.member.display_avatar.url)
         
-        # Если туз сейчас считается за 1, но мог бы считаться за 11 (без перебора), показываем оба варианта
-        # В нашей реализации s, soft, orig: s - итоговый, orig - со всеми тузами по 11
-        # Если s < orig, значит мы уже убавили тузы. 
-        # Если orig <= 21, значит у нас "мягкая" рука.
-        if p_orig <= 21 and p_orig != p_score:
-            score_display = f"{p_orig} / {p_score}"
-        else:
-            score_display = f"{p_score}"
+        score_display = f"{p_score} / {p_alt}" if p_soft else f"{p_score}"
             
         embed.add_field(name="👤 ВАШИ КАРТЫ", value=f"{format_hand(self.game.player_hand)}\nСчет: **{score_display}**", inline=False)
         
@@ -138,8 +131,9 @@ class BlackjackView(View):
             embed.add_field(name="🤖 ДИЛЕР", value=f"Карты: {d_cards}\nСчет: **?**", inline=False)
             embed.description = f"💰 Ставка: **{self.bet} 🪙** | Баланс: **{balance:,} 🪙**"
         else:
-            d_score, _, _ = calculate_score(self.game.dealer_hand)
-            embed.add_field(name="🤖 ДИЛЕР", value=f"Карты: {format_hand(self.game.dealer_hand)}\nСчет: **{d_score}**", inline=False)
+            d_score, d_soft, d_alt = calculate_score(self.game.dealer_hand)
+            d_score_display = f"{d_score} / {d_alt}" if d_soft else f"{d_score}"
+            embed.add_field(name="🤖 ДИЛЕР", value=f"Карты: {format_hand(self.game.dealer_hand)}\nСчет: **{d_score_display}**", inline=False)
             
             if self.game.status == "player_win": 
                 embed.description = f"🎉 **ПОБЕДА!**\nВыигрыш: **+{self.bet} 🪙**"; embed.color = 0x57F287

@@ -177,7 +177,7 @@ class Database:
                 res = await cur.fetchone()
                 if not res: return 0
                 user_xp = res['xp']
-                await cur.execute("SELECT COUNT(*) as rank FROM users WHERE xp > %s", (user_xp,))
+                await cur.execute("SELECT COUNT(*) as `rank` FROM users WHERE xp > %s", (user_xp,))
                 rank_res = await cur.fetchone()
                 return rank_res['rank'] + 1
 
