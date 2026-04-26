@@ -136,7 +136,6 @@ class Music(commands.Cog):
                     match = re.search(r'<title>(.+?)</title>', html)
                     if match:
                         full_title = match.group(1)
-                        # Track Title - song by Artist | Spotify
                         clean_title = full_title.split("|")[0].replace("song and lyrics by", "").strip()
                         return clean_title
             except Exception as e:
@@ -171,18 +170,14 @@ class Music(commands.Cog):
         state.message_channel = ctx.channel
         vc = ctx.voice_client or await ctx.author.voice.channel.connect()
 
-        # Обработка Spotify
         if "spotify.com/track" in search:
             await ctx.send("🔍 Парсим Spotify...", delete_after=5)
             s_title = await self.get_spotify_track_info(search)
-            if s_title:
-                search = f"ytsearch:{s_title}"
-            else:
-                return await ctx.send("❌ Не удалось получить информацию из Spotify.", delete_after=10)
+            if s_title: search = f"ytsearch:{s_title}"
+            else: return await ctx.send("❌ Не удалось получить информацию из Spotify.")
         elif not search.startswith("http"):
             search = f"ytsearch:{search}"
 
-        # Умные лимиты
         active_users = set(t['user_id'] for t in state.queue)
         if state.current_track: active_users.add(state.current_track['user_id'])
         is_alone = len(active_users) <= 1 and (not active_users or ctx.author.id in active_users)
@@ -190,9 +185,7 @@ class Music(commands.Cog):
 
         try:
             data = await self.bot.loop.run_in_executor(None, lambda: ytdl.extract_info(search, download=False, process=False))
-            
-            if data is None:
-                return await ctx.send("❌ Ничего не найдено.", delete_after=10)
+            if data is None: return await ctx.send("❌ Ничего не найдено.")
             
             tracks_to_add = []
             if 'entries' in data and data['entries']:
@@ -206,55 +199,43 @@ class Music(commands.Cog):
                     if url:
                         tracks_to_add.append({'url': url, 'title': entry.get('title', 'Без названия'), 'user_id': ctx.author.id})
                         added_count += 1
-                if 'ytsearch' not in search and "entries" in data:
-                    await ctx.send(f"✅ Добавлено **{added_count}** треков. (Лимит: {playlist_limit})", delete_after=10)
             else:
                 url = data.get('url') or data.get('webpage_url') or search
                 tracks_to_add.append({'url': url, 'title': data.get('title', 'Без названия'), 'user_id': ctx.author.id})
 
-            if not tracks_to_add:
-                return await ctx.send("❌ Не удалось получить информацию о треках.", delete_after=10)
-# Добавляем в очередь
-started_playing = False
-for track in tracks_to_add:
-    if not vc.is_playing() and not vc.is_paused() and not state.current_track:
-        state.current_track = track
-        player = await YTDLSource.from_url(track['url'], loop=self.bot.loop, stream=True)
-        if player:
-            vc.play(player, after=lambda e: self.play_next(ctx))
-            await self.update_controls(ctx.guild.id, player.title)
-            started_playing = True
-        else:
-            state.current_track = None
-    else:
-        state.queue.append(track)
+            if not tracks_to_add: return await ctx.send("❌ Не удалось найти треки.")
 
-# Уведомления пользователю
-if len(tracks_to_add) > 1:
-    # Если это был плейлист
-    await ctx.send(f"✅ Добавлено **{len(tracks_to_add)}** треков в очередь. (Лимит: {playlist_limit})", delete_after=10)
-elif len(tracks_to_add) == 1 and not started_playing:
-    # Если один трек добавлен в уже играющую очередь
-    await ctx.send(f"➕ Добавлено в очередь: **{tracks_to_add[0]['title']}**", delete_after=10)
-
-# Обновляем плеер, чтобы показать новое кол-во треков в очереди
-if state.current_track:
-    await self.update_controls(ctx.guild.id)
-
+            started_playing = False
+            for track in tracks_to_add:
+                if not vc.is_playing() and not vc.is_paused() and not state.current_track:
+                    state.current_track = track
+                    player = await YTDLSource.from_url(track['url'], loop=self.bot.loop, stream=True)
+                    if player:
+                        vc.play(player, after=lambda e: self.play_next(ctx))
+                        await self.update_controls(ctx.guild.id, player.title)
+                        started_playing = True
+                    else: state.current_track = None
+                else:
+                    state.queue.append(track)
+            
+            if len(tracks_to_add) > 1:
+                await ctx.send(f"✅ Добавлено **{len(tracks_to_add)}** треков. (Лимит: {playlist_limit})", delete_after=10)
+            elif not started_playing:
+                await ctx.send(f"➕ Добавлено в очередь: **{tracks_to_add[0]['title']}**", delete_after=10)
+            
+            if state.current_track: await self.update_controls(ctx.guild.id)
 
         except Exception as e:
             logging.error(f"Play error: {e}")
-            await ctx.send(f"❌ Произошла ошибка при поиске.")
+            await ctx.send(f"❌ Ошибка при поиске.")
 
     def play_next(self, ctx):
         state = self.get_state(ctx.guild.id)
         vc = ctx.voice_client
         if not vc: return
-
         next_track = None
         if state.repeat: next_track = state.current_track
         elif state.queue: next_track = state.queue.pop(0)
-
         if next_track:
             state.current_track = next_track
             coro = YTDLSource.from_url(next_track['url'], loop=self.bot.loop, stream=True)
@@ -264,10 +245,8 @@ if state.current_track:
                 if player:
                     vc.play(player, after=lambda e: self.play_next(ctx))
                     asyncio.run_coroutine_threadsafe(self.update_controls(ctx.guild.id, player.title), self.bot.loop)
-                else:
-                    self.play_next(ctx)
-            except:
-                self.play_next(ctx)
+                else: self.play_next(ctx)
+            except: self.play_next(ctx)
         else:
             state.current_track = None
             asyncio.run_coroutine_threadsafe(vc.disconnect(), self.bot.loop)
