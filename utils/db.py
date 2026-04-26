@@ -202,7 +202,7 @@ class Database:
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 from datetime import datetime
-                await cur.execute("SELECT user_id FROM users WHERE xp_boost_until IS NOT NULL AND xp_boost_until < %s", (datetime.utcnow(),))
+                await cur.execute("SELECT * FROM users WHERE xp_boost_until IS NOT NULL AND xp_boost_until < %s", (datetime.utcnow(),))
                 return await cur.fetchall()
 
     async def get_active_voice_memes(self):
