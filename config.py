@@ -17,3 +17,8 @@ DB_NAME = os.getenv("DB_NAME", "mriamys_bot")
 COLOR_MAIN = 0x2b2d31  # Цвет фона дискорда для бесшовных Embed
 COLOR_SUCCESS = 0x57F287
 COLOR_ERROR = 0xED4245
+
+# Quiz Settings
+# 0 - Open Trivia DB (API)
+# 1 - Local CSV (База КХСМ.csv)
+QUIZ_DATABASE_TYPE = 1

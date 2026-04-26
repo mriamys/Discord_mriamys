@@ -6,9 +6,10 @@ import asyncio
 import aiohttp
 import html
 import time
+import csv
 from utils.db import db
 from deep_translator import GoogleTranslator
-from config import COLOR_MAIN, COLOR_SUCCESS, COLOR_ERROR
+from config import COLOR_MAIN, COLOR_SUCCESS, COLOR_ERROR, QUIZ_DATABASE_TYPE
 
 translator = GoogleTranslator(source='en', target='ru')
 
@@ -16,9 +17,69 @@ translator = GoogleTranslator(source='en', target='ru')
 OTDB_URL = "https://opentdb.com/api.php?amount=10&type=multiple"
 
 _questions_cache = []
+_csv_questions_cache = []
+
+def load_csv_questions():
+    global _csv_questions_cache
+    if _csv_questions_cache:
+        return _csv_questions_cache
+    
+    questions = []
+    try:
+        with open('База КХСМ.csv', mode='r', encoding='utf-8') as f:
+            # Пропускаем первые 3 строки (заголовок/дисклеймер)
+            for _ in range(3):
+                next(f)
+            
+            reader = csv.DictReader(f)
+            for row in reader:
+                if not row.get('Вопрос') or not row.get('Ответ'):
+                    continue
+                
+                q_text = row['Вопрос']
+                options = {
+                    'A': row['Вариант A'],
+                    'B': row['Вариант B'],
+                    'C': row['Вариант C'],
+                    'D': row['Вариант D']
+                }
+                correct_key = row['Ответ'].strip().upper()
+                if correct_key not in options:
+                    continue
+                
+                correct_answer = options[correct_key]
+                all_options = list(options.values())
+                
+                questions.append({
+                    "q": q_text,
+                    "a": correct_answer,
+                    "o": all_options
+                })
+    except Exception as e:
+        print(f"[Quiz] Error loading CSV: {e}")
+    
+    _csv_questions_cache = questions
+    return _csv_questions_cache
 
 async def fetch_question():
     global _questions_cache
+    
+    if QUIZ_DATABASE_TYPE == 1:
+        # Локальная база (CSV)
+        questions = load_csv_questions()
+        if not questions:
+            return {
+                "q": "База вопросов пуста или не загружена. Проверьте CSV файл.",
+                "a": "Ошибка",
+                "o": ["Ошибка", "Ошибка", "Ошибка", "Ошибка"]
+            }
+        
+        raw_q = random.choice(questions)
+        opts = raw_q['o'].copy()
+        random.shuffle(opts)
+        return {"q": raw_q['q'], "a": raw_q['a'], "o": opts}
+    
+    # Иначе API (Open Trivia DB)
     if not _questions_cache:
         async with aiohttp.ClientSession() as session:
             try:
