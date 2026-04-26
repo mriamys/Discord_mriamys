@@ -21,15 +21,21 @@ class Economy(commands.Cog):
         self.save_voice_sessions.cancel()
         self.check_boost_expirations.cancel()
 
-    @tasks.loop(minutes=2)
+    @tasks.loop(minutes=1)
     async def check_boost_expirations(self):
         expired = await db.get_expired_boosts()
         for row in expired:
             user_id = row['user_id']
-            # Чистим в БД сразу, чтобы не слать по 100 раз если что-то упадет
-            await db.update_user(user_id, xp_boost_until=None)
+            xp_gained = row.get('xp_boost_xp_gained', 0)
+            coins_gained = row.get('xp_boost_coins_gained', 0)
             
-            # Ищем юзера в гильдиях для уведомления
+            # Сбрасываем буст полностью
+            await db.update_user(user_id, 
+                                 xp_boost_until=None, 
+                                 xp_boost_remaining=0,
+                                 xp_boost_xp_gained=0,
+                                 xp_boost_coins_gained=0)
+            
             member = None
             guild = None
             for g in self.bot.guilds:
@@ -41,22 +47,23 @@ class Economy(commands.Cog):
             if member and guild:
                 embed = discord.Embed(
                     title="⚡ Буст опыта x2 завершен",
-                    description=f"{member.mention}, твой бонусный опыт закончился. Возвращаемся к обычным рейтам! 📉",
+                    description=f"{member.mention}, время действия твоего буста истекло.",
                     color=0xFFD700
                 )
+                embed.add_field(name="📊 Отчет по бусту", value=(
+                    f"▫️ Получено опыта: **+{int(xp_gained)} XP**\n"
+                    f"▫️ Получено коинов: **+{int(coins_gained)} 🪙**"
+                ))
+                embed.set_footer(text="Буст работал только во время активного фарма опыта.")
                 
                 chan = discord.utils.get(guild.text_channels, name="📜┃ранг")
                 try:
-                    if chan:
-                        await chan.send(content=member.mention, embed=embed)
-                    else:
-                        await member.send(embed=embed)
-                except Exception:
-                    pass
+                    if chan: await chan.send(content=member.mention, embed=embed)
+                    else: await member.send(embed=embed)
+                except: pass
 
     @tasks.loop(minutes=2)
     async def save_voice_sessions(self):
-        # Периодически сохраняем голосовое время, чтобы прогресс не терялся при рестарте
         now = time.time()
         for user_id, join_time in list(self.voice_sessions.items()):
             duration = int(now - join_time)
@@ -65,89 +72,92 @@ class Economy(commands.Cog):
                 for guild in self.bot.guilds:
                     user = guild.get_member(int(user_id))
                     if user: break
-                    
                 if not user:
                     user = self.bot.get_user(int(user_id))
-                    
-                if user:
-                    pass # Handled below
                 
                 await self._process_voice_duration(user, user_id, duration)
-                # Обновляем время старта для этого юзера, если он всё еще в словаре
                 if user_id in self.voice_sessions:
                     self.voice_sessions[user_id] = now
 
+    def _is_eligible(self, member):
+        if not member or member.bot: return False
+        if not member.voice or not member.voice.channel: return False
+        
+        # AFK канал
+        if member.guild.afk_channel and member.voice.channel.id == member.guild.afk_channel.id:
+            return False
+            
+        # Мут ушей
+        if member.voice.self_deaf or member.voice.deaf:
+            return False
+            
+        # Один в канале
+        non_bots = [m for m in member.voice.channel.members if not m.bot]
+        if len(non_bots) < 2:
+            return False
+            
+        return True
+
     @commands.Cog.listener()
     async def on_ready(self):
-        # При запуске или рестарте бота проверяем, кто уже сидит в войсе с соблюдением правил (анти-абуз)
         now = time.time()
         for guild in self.bot.guilds:
             for vc in guild.voice_channels:
-                non_bots = [m for m in vc.members if not m.bot]
                 for member in vc.members:
-                    if member.bot:
-                        continue
-                        
-                    eligible = True
-                    if guild.afk_channel and vc.id == guild.afk_channel.id:
-                        eligible = False
-                    elif getattr(member.voice, 'self_deaf', False) or getattr(member.voice, 'deaf', False):
-                        eligible = False
-                    elif len(non_bots) < 2:
-                        eligible = False
-                        
-                    if eligible and str(member.id) not in self.voice_sessions:
-                        self.voice_sessions[str(member.id)] = now
+                    if self._is_eligible(member):
+                        user_id = str(member.id)
+                        if user_id not in self.voice_sessions:
+                            self.voice_sessions[user_id] = now
+                            # При запуске проверяем, нужно ли снять буст с паузы
+                            await self._manage_boost_state(member, True)
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author.bot:
-            return
-            
-        # Игнорируем DMs
-        if not message.guild:
-            return
-            
-        # Игнорируем сообщения, которые начинаются как команды бота
-        if message.content.startswith(PREFIX):
+        if message.author.bot or not message.guild or message.content.startswith(PREFIX):
             return
             
         now = time.time()
         user_id = str(message.author.id)
         
-        # Кулдаун 15 секунд на получение бонусов за текст
         last_msg = self.msg_cooldowns.get(user_id, 0)
-        if now - last_msg < 15:
-            return
-            
+        if now - last_msg < 15: return
         self.msg_cooldowns[user_id] = now
             
-        # Начисляем VibeКоины и опыт за сообщения (рандом для интереса)
         user_data = await db.get_user(user_id)
         
-        # Проверяем буст опыта
         xp_multiplier = 1
+        is_boosted = False
         xp_boost_until = user_data.get('xp_boost_until')
+        
         if xp_boost_until:
             if isinstance(xp_boost_until, str):
                 xp_boost_until = datetime.strptime(str(xp_boost_until).split('.')[0], '%Y-%m-%d %H:%M:%S')
             if xp_boost_until > datetime.utcnow():
                 xp_multiplier = 2
+                is_boosted = True
         
-        # 1-3 монетки за сообщение
-        new_coins = user_data.get('vibecoins', 0) + random.randint(1, 3)
-        # 15-25 XP за сообщение (с учетом буста)
-        new_xp = user_data.get('xp', 0) + (random.randint(15, 25) * xp_multiplier)
-        # Статы для ачивок
-        new_msg_count = user_data.get('msg_count', 0) + 1
+        coins_add = random.randint(1, 3)
+        xp_base = random.randint(15, 25)
+        xp_add = xp_base * xp_multiplier
         
-        await db.update_user(user_id, vibecoins=new_coins, xp=new_xp, msg_count=new_msg_count)
+        new_coins = user_data.get('vibecoins', 0) + coins_add
+        new_xp = user_data.get('xp', 0) + xp_add
         
-        # Вызываем диспетчер проверки уровня (это будет ловить Cog Leveling)
+        # Обновляем статистику буста если активен
+        boost_xp_stats = user_data.get('xp_boost_xp_gained', 0)
+        boost_coins_stats = user_data.get('xp_boost_coins_gained', 0)
+        if is_boosted:
+            boost_xp_stats += (xp_add - xp_base) # Только бонусная часть
+            boost_coins_stats += coins_add # Коины тоже считаем в отчет
+            
+        await db.update_user(user_id, 
+                             vibecoins=new_coins, 
+                             xp=new_xp, 
+                             msg_count=user_data.get('msg_count', 0) + 1,
+                             xp_boost_xp_gained=boost_xp_stats,
+                             xp_boost_coins_gained=boost_coins_stats)
+        
         self.bot.dispatch("xp_updated", message.author, new_xp)
-        self.bot.dispatch("message_sent", message.author, new_msg_count)
-        
-        # Проверяем взаимодействие через реплай для ачивок
         if message.reference and isinstance(message.reference.resolved, discord.Message):
             replied_to = message.reference.resolved.author
             if replied_to.id != message.author.id and not replied_to.bot:
@@ -155,160 +165,124 @@ class Economy(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        # Чтобы проверять одиночество в канале (анти-абуз),
-        # мы должны перепроверять всех участников в каналах "до" и "после" изменения.
         users_to_check = {member}
-        if before.channel:
-            users_to_check.update(before.channel.members)
-        if after.channel:
-            users_to_check.update(after.channel.members)
+        if before.channel: users_to_check.update(before.channel.members)
+        if after.channel: users_to_check.update(after.channel.members)
             
         now = time.time()
-        
         for u in users_to_check:
-            if u.bot:
-                continue
-                
-            eligible = False
-            if u.voice and u.voice.channel:
-                if u.guild.afk_channel and u.voice.channel.id == u.guild.afk_channel.id:
-                    eligible = False
-                elif u.voice.self_deaf or u.voice.deaf:
-                    eligible = False
-                else:
-                    non_bots = [m for m in u.voice.channel.members if not m.bot]
-                    if len(non_bots) >= 2:
-                        eligible = True
-                        
+            eligible = self._is_eligible(u)
             user_id = str(u.id)
             
-            # Начинаем трекать, если стал eligible
             if eligible and user_id not in self.voice_sessions:
                 self.voice_sessions[user_id] = now
-            
-            # Проверяем достижения, если пользователь eligible. 
-            # Раньше это было внутри блока "if eligible and user_id not in self.voice_sessions", 
-            # что мешало получению ачивки, если кто-то зашел в уже существующую сессию.
-            if eligible:
+                # Снимаем буст с паузы
+                await self._manage_boost_state(u, True)
                 self.bot.dispatch("voice_role_interaction", u, u.voice.channel.members)
-                
-            # Заканчиваем трекать, если перестал быть eligible (вышел, замутился, остался один в канале)
             elif not eligible and user_id in self.voice_sessions:
                 join_time = self.voice_sessions.pop(user_id)
                 duration = int(now - join_time)
                 await self._process_voice_duration(u, user_id, duration)
+                # Ставим буст на паузу
+                await self._manage_boost_state(u, False)
+
+    async def _manage_boost_state(self, member, active: bool):
+        user_id = str(member.id)
+        user_data = await db.get_user(user_id)
+        now = datetime.utcnow()
+        
+        if active:
+            # Снимаем с паузы
+            remaining = user_data.get('xp_boost_remaining', 0)
+            if remaining > 0:
+                new_until = now + timedelta(seconds=remaining)
+                await db.update_user(user_id, xp_boost_until=new_until, xp_boost_remaining=0)
+        else:
+            # Ставим на паузу
+            boost_until = user_data.get('xp_boost_until')
+            if boost_until:
+                if isinstance(boost_until, str):
+                    boost_until = datetime.strptime(str(boost_until).split('.')[0], '%Y-%m-%d %H:%M:%S')
+                
+                if boost_until > now:
+                    remaining = int((boost_until - now).total_seconds())
+                    await db.update_user(user_id, xp_boost_until=None, xp_boost_remaining=remaining)
+                else:
+                    # Буст уже истек, пока он сидел
+                    pass 
 
     async def _process_voice_duration(self, u, user_id, duration):
-        if duration <= 0:
-            return
-            
+        if duration <= 0: return
         user_data = await db.get_user(user_id)
+        
         old_seconds = user_data.get('voice_time_seconds', 0)
         total_voice_time = old_seconds + duration
+        delta_minutes = (total_voice_time // 60) - (old_seconds // 60)
         
-        # Считаем разницу, чтобы не терялись остатки секунд при переподключениях
-        old_minutes = old_seconds // 60
-        new_minutes = total_voice_time // 60
-        delta_minutes = new_minutes - old_minutes
-        
-        # Стрик система (Киевское время)
+        # Стрик система (упрощенно как было)
         kyiv_tz = ZoneInfo("Europe/Kyiv")
         today = datetime.now(kyiv_tz).date()
         last_daily = user_data.get('last_daily')
         streak = user_data.get('streak', 0)
-        
         last_daily_date = None
         if last_daily:
-            try:
-                if isinstance(last_daily, str):
-                    dt_utc = datetime.strptime(str(last_daily).split('.')[0], '%Y-%m-%d %H:%M:%S')
-                else:
-                    dt_utc = last_daily
-                    
-                if dt_utc.tzinfo is None:
-                    dt_utc = dt_utc.replace(tzinfo=ZoneInfo("UTC"))
-                    
-                last_daily_date = dt_utc.astimezone(kyiv_tz).date()
-            except Exception as e:
-                print(f"Timezone error: {e}")
-                
+            if isinstance(last_daily, str): last_daily = datetime.strptime(str(last_daily).split('.')[0], '%Y-%m-%d %H:%M:%S')
+            last_daily_date = last_daily.replace(tzinfo=ZoneInfo("UTC")).astimezone(kyiv_tz).date()
+        
         streak_bonus = 0
         if last_daily_date != today:
-            if last_daily_date == today - timedelta(days=1):
-                streak += 1
-            else:
-                streak = 1
-
-            last_daily = datetime.utcnow() # Сохраняем в БД как UTC для целостности
+            if last_daily_date == today - timedelta(days=1): streak += 1
+            else: streak = 1
+            last_daily = datetime.utcnow()
             streak_bonus = min(streak * 100, 3000)
-
-            # ВЫДАЧА ЕЖЕДНЕВНОГО ЗАДАНИЯ ПРИ ОБНОВЛЕНИИ СТРИКА
-            task_msg = ""
-            tasks_cog = self.bot.get_cog("DailyTasks")
-            if tasks_cog:
-                new_task = await tasks_cog.assign_new_task(u)
-                if new_task:
-                    task_msg = (
-                        f"\n\n🌟 **Твое ежедневное задание:**\n"
-                        f"**{new_task['name']}**: {new_task['desc']}\n"
-                        f"🎁 Награда: **{new_task['reward_coins']} 🪙** и **{new_task['reward_xp']} XP**"
-                    )
-
             if u:
-                try:
-                    self.bot.loop.create_task(u.send(f"🔥 Твой войс-стрик обновлен! Ты зашел **{streak} день подряд** и получил бонус: **{streak_bonus} 🪙**{task_msg}"))
-                except:
-                    pass
-
+                try: await u.send(f"🔥 Твой войс-стрик обновлен! День: **{streak}**, Бонус: **{streak_bonus} 🪙**")
+                except: pass
                 self.bot.dispatch("streak_updated", u, streak)
 
-        # Проверяем буст опыта
+        # Проверка буста
         xp_multiplier = 1
+        is_boosted = False
         xp_boost_until = user_data.get('xp_boost_until')
         if xp_boost_until:
             if isinstance(xp_boost_until, str):
                 xp_boost_until = datetime.strptime(str(xp_boost_until).split('.')[0], '%Y-%m-%d %H:%M:%S')
             if xp_boost_until > datetime.utcnow():
                 xp_multiplier = 2
+                is_boosted = True
 
-        new_coins = user_data.get('vibecoins', 0) + (delta_minutes * 6) + streak_bonus
-        new_xp = user_data.get('xp', 0) + (delta_minutes * 10 * xp_multiplier)
+        coins_add = (delta_minutes * 6) + streak_bonus
+        xp_base = (delta_minutes * 10)
+        xp_add = xp_base * xp_multiplier
+        
+        boost_xp_stats = user_data.get('xp_boost_xp_gained', 0)
+        boost_coins_stats = user_data.get('xp_boost_coins_gained', 0)
+        if is_boosted:
+            boost_xp_stats += (xp_add - xp_base)
+            boost_coins_stats += (delta_minutes * 6)
 
         await db.update_user(user_id,
-                             vibecoins=new_coins,
-                             xp=new_xp,
+                             vibecoins=user_data.get('vibecoins', 0) + coins_add,
+                             xp=user_data.get('xp', 0) + xp_add,
                              voice_time_seconds=total_voice_time,
                              streak=streak,
-                             last_daily=last_daily)
+                             last_daily=last_daily,
+                             xp_boost_xp_gained=boost_xp_stats,
+                             xp_boost_coins_gained=boost_coins_stats)
 
-        if u:
-            if delta_minutes > 0:
-                self.bot.dispatch("xp_updated", u, new_xp)
-                # Передаем и общее время, и сколько минут начислено сейчас (для квеста)
-                self.bot.dispatch("voice_time_updated", u, total_voice_time, delta_minutes)
-            else:
-                self.bot.dispatch("voice_time_updated", u, total_voice_time, 0)
+        if u and delta_minutes > 0:
+            self.bot.dispatch("xp_updated", u, user_data.get('xp', 0) + xp_add)
+            self.bot.dispatch("voice_time_updated", u, total_voice_time, delta_minutes)
+
     @discord.app_commands.command(name="give-money", description="[Admin] Выдать VibeКоины пользователю")
     @discord.app_commands.default_permissions(administrator=True)
     async def give_money(self, interaction: discord.Interaction, member: discord.Member, amount: int):
         if interaction.user.id != interaction.guild.owner_id:
-            await interaction.response.send_message("❌ Эта команда доступна только владельцу сервера.", ephemeral=True)
-            return
-            
-        if amount <= 0:
-            await interaction.response.send_message("❌ Сумма должна быть больше 0.", ephemeral=True)
-            return
-            
-        user_id = str(member.id)
-        user_data = await db.get_user(user_id)
+            return await interaction.response.send_message("❌ Только для владельца.", ephemeral=True)
+        user_data = await db.get_user(str(member.id))
         new_coins = user_data.get('vibecoins', 0) + amount
-        await db.update_user(user_id, vibecoins=new_coins)
-        
-        self.bot.dispatch("balance_updated", member, new_coins)
-        
-        await interaction.response.send_message(f"✅ Выдано **{amount} 🪙** пользователю {member.mention}. Теперь у него: **{new_coins} 🪙**")
-
-
+        await db.update_user(str(member.id), vibecoins=new_coins)
+        await interaction.response.send_message(f"✅ Выдано **{amount} 🪙** {member.mention}. Итого: **{new_coins} 🪙**")
 
 async def setup(bot):
     await bot.add_cog(Economy(bot))
