@@ -1,10 +1,12 @@
 import discord
 from discord.ext import commands
+from discord.ui import View, Button
 import yt_dlp
 import asyncio
 import aiohttp
 import re
 import logging
+import time
 from config import COLOR_SUCCESS, COLOR_ERROR
 
 YTDL_OPTIONS = {
@@ -51,126 +53,206 @@ class YTDLSource(discord.PCMVolumeTransformer):
         filename = data['url'] if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS), data=data)
 
+class GuildState:
+    def __init__(self):
+        self.queue = []
+        self.current_track = None  
+        self.current_title = "Ничего не играет"
+        self.repeat_mode = 0  # 0: Off, 1: Single, 2: Queue
+        self.message_channel = None
+        self.controls_msg = None
+
+    def toggle_repeat(self):
+        self.repeat_mode = (self.repeat_mode + 1) % 3
+        return self.repeat_mode
+
+class MusicControlView(View):
+    def __init__(self, cog, guild_id):
+        super().__init__(timeout=None)
+        self.cog = cog
+        self.guild_id = guild_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Проверяем, находится ли пользователь в голосовом канале
+        if not interaction.user.voice or not interaction.user.voice.channel:
+            await interaction.response.send_message("❌ Вы должны быть в голосовом канале, чтобы управлять музыкой!", ephemeral=True)
+            return False
+        
+        # Проверяем, находится ли пользователь в том же канале, что и бот
+        vc = interaction.guild.voice_client
+        if vc and interaction.user.voice.channel != vc.channel:
+            await interaction.response.send_message(f"❌ Вы должны быть в канале {vc.channel.mention}, чтобы управлять плеером!", ephemeral=True)
+            return False
+            
+        return True
+
+    @discord.ui.button(emoji="⏯️", style=discord.ButtonStyle.secondary)
+    async def play_pause(self, interaction: discord.Interaction, button: Button):
+        vc = interaction.guild.voice_client
+        if not vc: return
+        
+        if vc.is_playing():
+            vc.pause()
+            await interaction.response.send_message("⏸️ Пауза", ephemeral=True)
+        elif vc.is_paused():
+            vc.resume()
+            await interaction.response.send_message("▶️ Возобновлено", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Ничего не играет", ephemeral=True)
+
+    @discord.ui.button(emoji="⏭️", style=discord.ButtonStyle.secondary)
+    async def skip(self, interaction: discord.Interaction, button: Button):
+        vc = interaction.guild.voice_client
+        if vc and (vc.is_playing() or vc.is_paused()):
+            vc.stop()
+            await interaction.response.send_message("⏭️ Пропущено", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Нечего пропускать", ephemeral=True)
+
+    @discord.ui.button(emoji="🔄", style=discord.ButtonStyle.secondary)
+    async def repeat(self, interaction: discord.Interaction, button: Button):
+        state = self.cog.get_state(self.guild_id)
+        mode = state.toggle_repeat()
+        modes = {0: "Выкл", 1: "Трек", 2: "Очередь"}
+        await interaction.response.send_message(f"🔄 Повтор: **{modes[mode]}**", ephemeral=True)
+        # Можно обновить эмбед если нужно
+
+    @discord.ui.button(emoji="⏹️", style=discord.ButtonStyle.danger)
+    async def stop(self, interaction: discord.Interaction, button: Button):
+        state = self.cog.get_state(self.guild_id)
+        vc = interaction.guild.voice_client
+        if vc:
+            state.queue = []
+            state.current_track = None
+            await vc.disconnect()
+            await interaction.response.send_message("⏹️ Остановлено", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Бот не в канале", ephemeral=True)
+
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.queues = {} # guild_id -> list of urls
+        self.states = {}
+
+    def get_state(self, guild_id):
+        if guild_id not in self.states:
+            self.states[guild_id] = GuildState()
+        return self.states[guild_id]
 
     async def check_channel(self, ctx):
-        """Вспомогательная проверка канала."""
         channel_name = ctx.channel.name.lower()
         if "музыка" not in channel_name and "music" not in channel_name:
             music_channel = discord.utils.get(ctx.guild.text_channels, name="🎵┃музыка")
             if not music_channel:
                 music_channel = discord.utils.get(ctx.guild.text_channels, name="музыка")
-            
             hint = f" в канале {music_channel.mention}" if music_channel else ""
-            await ctx.send(f"❌ Музыкальные команды можно использовать только{hint}!", ephemeral=True)
+            await ctx.send(f"❌ Команды только{hint}!", ephemeral=True)
             return False
         return True
 
     async def get_spotify_track_info(self, url):
-        # Ленивый парсинг Spotify без API (читаем Title страницы)
         async with aiohttp.ClientSession() as session:
             try:
                 async with session.get(url) as response:
                     html = await response.text()
                     match = re.search(r'<title>(.+?)</title>', html)
                     if match:
-                        full_title = match.group(1)
-                        # Обычно формат "Track Title - song and lyrics by Artist | Spotify"
-                        clean_title = full_title.split("|")[0].replace("song and lyrics by", "").strip()
-                        return clean_title
-            except Exception as e:
-                logging.error(f"Spotify scrape error: {e}")
+                        return match.group(1).split("|")[0].replace("song and lyrics by", "").strip()
+            except: pass
         return None
 
-    @commands.hybrid_command(name="play", description="Воспроизвести музыку (YouTube/Spotify/Название)")
-    async def play(self, ctx, *, search: str):
-        if not await self.check_channel(ctx):
-            return
+    def create_embed(self, state, title, color=COLOR_SUCCESS):
+        modes = {0: "❌ Выкл", 1: "🔂 Трек", 2: "🔁 Очередь"}
+        embed = discord.Embed(title="🎵 Музыкальный плеер", description=f"▶️ **{title}**", color=color)
+        embed.add_field(name="Очередь", value=f"{len(state.queue)} треков", inline=True)
+        embed.add_field(name="Повтор", value=modes[state.repeat_mode], inline=True)
+        return embed
 
+    @commands.hybrid_command(name="play", description="Играть музыку")
+    async def play(self, ctx, *, search: str):
+        if not await self.check_channel(ctx): return
         if not getattr(ctx.author, 'voice', None):
-            await ctx.send(embed=discord.Embed(description="❌ Ты должен быть в голосовом канале!", color=COLOR_ERROR))
-            return
+            return await ctx.send("❌ Зайди в голосовой канал!", ephemeral=True)
             
         await ctx.defer()
+        state = self.get_state(ctx.guild.id)
+        state.message_channel = ctx.channel
 
-        voice_client = ctx.voice_client
-        if not voice_client:
-            voice_client = await ctx.author.voice.channel.connect()
+        vc = ctx.voice_client or await ctx.author.voice.channel.connect()
 
-        # Проверка на Спотифай
         if "spotify.com/track" in search:
-            await ctx.send(embed=discord.Embed(description="🔍 Парсим Spotify...", color=COLOR_SUCCESS))
-            spotify_title = await self.get_spotify_track_info(search)
-            if spotify_title:
-                search = f"ytsearch:{spotify_title}"
-            else:
-                await ctx.send(embed=discord.Embed(description="❌ Не удалось прочитать Spotify трек.", color=COLOR_ERROR))
-                return
+            s_title = await self.get_spotify_track_info(search)
+            if s_title: search = f"ytsearch:{s_title}"
+            else: return await ctx.send("❌ Ошибка Spotify")
         elif not search.startswith("http"):
             search = f"ytsearch:{search}"
 
         try:
             player = await YTDLSource.from_url(search, loop=self.bot.loop, stream=True)
-            if voice_client.is_playing():
-                if ctx.guild.id not in self.queues:
-                    self.queues[ctx.guild.id] = []
-                self.queues[ctx.guild.id].append(search)
-                queue_len = len(self.queues[ctx.guild.id])
-                await ctx.send(embed=discord.Embed(description=f"🎵 Добавлено в очередь: **{player.title}**\n*(Треков в очереди: {queue_len})*", color=COLOR_SUCCESS))
+            if vc.is_playing() or vc.is_paused():
+                state.queue.append(search)
+                await ctx.send(f"➕ Добавлено: **{player.title}**")
             else:
-                voice_client.play(player, after=lambda e: self.play_next(ctx))
-                await ctx.send(embed=discord.Embed(description=f"▶️ Сейчас играет: **{player.title}**", color=COLOR_SUCCESS))
+                state.current_track = search
+                state.current_title = player.title
+                vc.play(player, after=lambda e: self.play_next(ctx))
+                view = MusicControlView(self, ctx.guild.id)
+                state.controls_msg = await ctx.send(embed=self.create_embed(state, player.title), view=view)
         except Exception as e:
-            await ctx.send(embed=discord.Embed(description=f"❌ Ошибка при загрузке: {e}", color=COLOR_ERROR))
+            await ctx.send(f"❌ Ошибка: {e}")
 
     def play_next(self, ctx):
-        if ctx.guild.id in self.queues and len(self.queues[ctx.guild.id]) > 0:
-            next_song = self.queues[ctx.guild.id].pop(0)
+        state = self.get_state(ctx.guild.id)
+        vc = ctx.voice_client
+        if not vc: return
+
+        next_song = None
+        if state.repeat_mode == 1: next_song = state.current_track
+        elif state.repeat_mode == 2:
+            if state.current_track: state.queue.append(state.current_track)
+            if state.queue: next_song = state.queue.pop(0)
+        else:
+            if state.queue: next_song = state.queue.pop(0)
+
+        if next_song:
+            state.current_track = next_song
             coro = YTDLSource.from_url(next_song, loop=self.bot.loop, stream=True)
             fut = asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
             try:
                 player = fut.result()
-            except Exception as e:
-                logging.error(e)
-                coro_msg = ctx.send(embed=discord.Embed(description=f"❌ Пропуск битого трека: {e}", color=COLOR_ERROR))
+                state.current_title = player.title
+                vc.play(player, after=lambda e: self.play_next(ctx))
+                view = MusicControlView(self, ctx.guild.id)
+                coro_msg = state.message_channel.send(embed=self.create_embed(state, player.title), view=view)
                 asyncio.run_coroutine_threadsafe(coro_msg, self.bot.loop)
+            except:
                 self.play_next(ctx)
-                return
-
-            ctx.voice_client.play(player, after=lambda e: self.play_next(ctx))
-            
-            # Send message to channel where command was executed
-            coro_msg = ctx.send(embed=discord.Embed(description=f"▶️ Сейчас играет: **{player.title}**", color=COLOR_SUCCESS))
-            asyncio.run_coroutine_threadsafe(coro_msg, self.bot.loop)
         else:
-            if ctx.voice_client:
-                asyncio.run_coroutine_threadsafe(ctx.voice_client.disconnect(), self.bot.loop)
-                coro_msg = ctx.send(embed=discord.Embed(description="⏹️ Очередь пуста, я покинул канал.", color=COLOR_SUCCESS))
-                asyncio.run_coroutine_threadsafe(coro_msg, self.bot.loop)
+            state.current_track = None
+            asyncio.run_coroutine_threadsafe(vc.disconnect(), self.bot.loop)
+            coro_msg = state.message_channel.send("⏹️ Очередь пуста.")
+            asyncio.run_coroutine_threadsafe(coro_msg, self.bot.loop)
 
-    @commands.hybrid_command(name="skip", description="Пропустить текущий трек")
+    @commands.hybrid_command(name="repeat", description="Режим повтора")
+    async def repeat(self, ctx):
+        state = self.get_state(ctx.guild.id)
+        mode = state.toggle_repeat()
+        modes = {0: "Выкл", 1: "Один трек", 2: "Вся очередь"}
+        await ctx.send(f"🔄 Повтор: **{modes[mode]}**")
+
+    @commands.hybrid_command(name="skip", description="Пропустить")
     async def skip(self, ctx):
-        if not await self.check_channel(ctx):
-            return
-
-        await ctx.defer()
-        if ctx.voice_client and ctx.voice_client.is_playing():
-            ctx.voice_client.stop()
-            await ctx.send(embed=discord.Embed(description="⏭️ Трек пропущен.", color=COLOR_SUCCESS))
-            
-    @commands.hybrid_command(name="stop", description="Остановить музыку и выгнать бота")
-    async def stop(self, ctx):
-        if not await self.check_channel(ctx):
-            return
-
-        await ctx.defer()
         if ctx.voice_client:
-            self.queues[ctx.guild.id] = []
+            ctx.voice_client.stop()
+            await ctx.send("⏭️ Пропущено")
+
+    @commands.hybrid_command(name="stop", description="Стоп")
+    async def stop(self, ctx):
+        state = self.get_state(ctx.guild.id)
+        if ctx.voice_client:
+            state.queue = []
             await ctx.voice_client.disconnect()
-            await ctx.send(embed=discord.Embed(description="⏹️ Бот покинул канал.", color=COLOR_SUCCESS))
+            await ctx.send("⏹️ Остановлено")
 
 async def setup(bot):
     await bot.add_cog(Music(bot))
