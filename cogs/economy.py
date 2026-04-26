@@ -101,15 +101,45 @@ class Economy(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         now = time.time()
+        eligible_ids = set()
         for guild in self.bot.guilds:
             for vc in guild.voice_channels:
                 for member in vc.members:
                     if self._is_eligible(member):
                         user_id = str(member.id)
+                        eligible_ids.add(user_id)
                         if user_id not in self.voice_sessions:
                             self.voice_sessions[user_id] = now
-                            # При запуске проверяем, нужно ли снять буст с паузы
                             await self._manage_boost_state(member, True)
+
+        # Дополнительная проверка: если у кого-то буст активен (есть xp_boost_until),
+        # но он сейчас НЕ eligible (нет в войсе с людьми) — ставим на паузу.
+        async with db.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("SELECT user_id, xp_boost_until FROM users WHERE xp_boost_until IS NOT NULL")
+                active_boosts = await cur.fetchall()
+                
+                for row in active_boosts:
+                    uid = row['user_id']
+                    if uid not in eligible_ids:
+                        # Ищем объект member, чтобы вызвать метод паузы
+                        m = None
+                        for g in self.bot.guilds:
+                            m = g.get_member(int(uid))
+                            if m: break
+                        
+                        if m:
+                            await self._manage_boost_state(m, False)
+                        else:
+                            # Если юзера нет на сервере, просто считаем остаток и сносим until в БД напрямую
+                            boost_until = row['xp_boost_until']
+                            if isinstance(boost_until, str):
+                                boost_until = datetime.strptime(str(boost_until).split('.')[0], '%Y-%m-%d %H:%M:%S')
+                            
+                            utcnow = datetime.utcnow()
+                            if boost_until > utcnow:
+                                remaining = int((boost_until - utcnow).total_seconds())
+                                await db.update_user(uid, xp_boost_until=None, xp_boost_remaining=remaining)
 
     @commands.Cog.listener()
     async def on_message(self, message):

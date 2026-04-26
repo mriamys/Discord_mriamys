@@ -131,8 +131,29 @@ class ShopView(View):
         u_data = await db.get_user(str(interaction.user.id))
         if u_data.get('vibecoins', 0) < 2500:
             await interaction.followup.send("❌ Мало коинов!", ephemeral=True); return
-        await db.update_user(str(interaction.user.id), vibecoins=u_data['vibecoins'] - 2500, xp_boost_until=datetime.utcnow() + timedelta(hours=2))
-        await interaction.followup.send("⚡ Буст x2 на 2 часа куплен!", ephemeral=True)
+        
+        # Проверка на активный буст
+        is_active = False
+        boost_until = u_data.get('xp_boost_until')
+        if boost_until:
+            if isinstance(boost_until, str):
+                boost_until = datetime.strptime(str(boost_until).split('.')[0], '%Y-%m-%d %H:%M:%S')
+            if boost_until > datetime.utcnow():
+                is_active = True
+        
+        if is_active or u_data.get('xp_boost_remaining', 0) > 0:
+            await interaction.followup.send("❌ У тебя уже есть активный или приостановленный буст! Дождись его окончания, чтобы купить новый.", ephemeral=True)
+            return
+
+        # При покупке сбрасываем старую статистику буста
+        await db.update_user(str(interaction.user.id), 
+                             vibecoins=u_data['vibecoins'] - 2500, 
+                             xp_boost_until=datetime.utcnow() + timedelta(hours=2),
+                             xp_boost_remaining=0,
+                             xp_boost_xp_gained=0,
+                             xp_boost_coins_gained=0)
+        
+        await interaction.followup.send("⚡ Буст x2 на 2 часа куплен! Он будет работать, когда ты общаешься или сидишь в войсе с кем-то.", ephemeral=True)
         interaction.client.dispatch("shop_purchased", interaction.user, "xp_boost", u_data['vibecoins'] - 2500, u_data.get('nick_changes', 0))
 
     @discord.ui.button(label="🔊 Мемы (2k)", style=discord.ButtonStyle.secondary, custom_id="shop_voice_meme", row=0)
