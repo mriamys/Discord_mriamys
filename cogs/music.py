@@ -13,9 +13,9 @@ YTDL_OPTIONS = {
     'extractaudio': True,
     'audioformat': 'mp3',
     'restrictfilenames': True,
-    'noplaylist': True,
+    'noplaylist': False, # Разрешаем плейлисты
     'nocheckcertificate': True,
-    'ignoreerrors': False,
+    'ignoreerrors': True,
     'logtostderr': False,
     'quiet': True,
     'no_warnings': True,
@@ -40,19 +40,22 @@ class YTDLSource(discord.PCMVolumeTransformer):
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
         loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
-        if 'entries' in data: data = data['entries'][0]
-        duration = data.get('duration', 0)
-        if duration and duration > 600:
-            raise ValueError(f"Трек слишком длинный. Максимум — 10 минут!")
+        # Для плейлистов используем специальный вызов
+        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False, process=True))
+        
+        if not data: return None
+        
+        if 'entries' in data:
+            # Если это плейлист, берем первый элемент для создания плеера
+            data = data['entries'][0]
+
         filename = data['url'] if stream else ytdl.prepare_filename(data)
         return cls(discord.FFmpegPCMAudio(filename, **FFMPEG_OPTIONS), data=data)
 
 class GuildState:
     def __init__(self):
-        self.queue = []
-        self.current_track = None  
-        self.current_title = "Ничего не играет"
+        self.queue = [] # Список диктов: {'url': url, 'title': title, 'user_id': id}
+        self.current_track = None # Дикт текущего трека
         self.repeat = False
         self.message_channel = None
         self.controls_msg = None
@@ -80,29 +83,26 @@ class MusicControlView(View):
         if vc.is_playing():
             vc.pause()
             button.label = "Играть"
-            await interaction.response.edit_message(view=self)
         elif vc.is_paused():
             vc.resume()
             button.label = "Пауза"
-            await interaction.response.edit_message(view=self)
+        await interaction.response.edit_message(view=self)
 
     @discord.ui.button(label="Пропуск", emoji="⏭️", style=discord.ButtonStyle.secondary)
     async def skip(self, interaction: discord.Interaction, button: Button):
         vc = interaction.guild.voice_client
         if vc:
-            # Отключаем повтор при пропуске, чтобы не зациклило этот же трек
             state = self.cog.get_state(self.guild_id)
             state.repeat = False
             vc.stop()
             await interaction.response.defer()
 
-    @discord.ui.button(label="Повтор: Выкл", emoji="🔄", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Повтор", emoji="🔄", style=discord.ButtonStyle.secondary)
     async def repeat(self, interaction: discord.Interaction, button: Button):
         state = self.cog.get_state(self.guild_id)
         state.repeat = not state.repeat
-        button.label = f"Повтор: {'Вкл' if state.repeat else 'Выкл'}"
         button.style = discord.ButtonStyle.primary if state.repeat else discord.ButtonStyle.secondary
-        await interaction.response.edit_message(embed=self.cog.create_embed(state, state.current_title), view=self)
+        await interaction.response.edit_message(embed=self.cog.create_embed(state, state.current_track['title']), view=self)
 
     @discord.ui.button(label="Стоп", emoji="⏹️", style=discord.ButtonStyle.danger)
     async def stop(self, interaction: discord.Interaction, button: Button):
@@ -112,7 +112,7 @@ class MusicControlView(View):
             state.queue = []
             state.current_track = None
             await vc.disconnect()
-            await interaction.response.edit_message(content="⏹️ Воспроизведение остановлено.", embed=None, view=None)
+            await interaction.response.edit_message(content="⏹️ Плеер остановлен.", embed=None, view=None)
 
 class Music(commands.Cog):
     def __init__(self, bot):
@@ -126,27 +126,23 @@ class Music(commands.Cog):
 
     def create_embed(self, state, title):
         embed = discord.Embed(title="🎵 Плеер", description=f"▶️ **{title}**", color=COLOR_SUCCESS)
-        embed.add_field(name="В очереди", value=f"{len(state.queue)}", inline=True)
+        embed.add_field(name="В очереди", value=f"{len(state.queue)} треков", inline=True)
         embed.add_field(name="Повтор", value="✅ Вкл" if state.repeat else "❌ Выкл", inline=True)
         return embed
 
     async def update_controls(self, guild_id, title=None):
         state = self.get_state(guild_id)
         if not state.message_channel: return
-        
-        embed = self.create_embed(state, title or state.current_title)
+        embed = self.create_embed(state, title or state.current_track['title'])
         view = MusicControlView(self, guild_id)
-        
-        # Если сообщение уже есть, пробуем его редактировать
         if state.controls_msg:
             try:
                 await state.controls_msg.edit(embed=embed, view=view)
                 return
             except: pass
-            
         state.controls_msg = await state.message_channel.send(embed=embed, view=view)
 
-    @commands.hybrid_command(name="play", description="Играть музыку")
+    @commands.hybrid_command(name="play", description="Играть музыку/плейлист")
     async def play(self, ctx, *, search: str):
         if not getattr(ctx.author, 'voice', None):
             return await ctx.send("❌ Зайди в голосовой канал!", ephemeral=True)
@@ -156,19 +152,50 @@ class Music(commands.Cog):
         state.message_channel = ctx.channel
         vc = ctx.voice_client or await ctx.author.voice.channel.connect()
 
-        if not search.startswith("http"): search = f"ytsearch:{search}"
+        # Умные лимиты
+        active_users = set(t['user_id'] for t in state.queue)
+        if state.current_track: active_users.add(state.current_track['user_id'])
+        
+        # Если в очереди только автор команды (или пусто), лимит 50. Если есть другие - 5.
+        is_alone = len(active_users) <= 1 and (not active_users or ctx.author.id in active_users)
+        playlist_limit = 50 if is_alone else 5
 
         try:
-            player = await YTDLSource.from_url(search, loop=self.bot.loop, stream=True)
-            if vc.is_playing() or vc.is_paused():
-                state.queue.append(search)
-                await ctx.send(f"➕ Добавлено: **{player.title}**", delete_after=10)
-                await self.update_controls(ctx.guild.id)
+            # Сначала получаем инфо (быстро)
+            data = await self.bot.loop.run_in_executor(None, lambda: ytdl.extract_info(search, download=False, process=False))
+            
+            tracks_to_add = []
+            if 'entries' in data:
+                # Это плейлист
+                entries = list(data['entries'])
+                added_count = 0
+                for entry in entries:
+                    if added_count >= playlist_limit: break
+                    url = entry.get('url') or entry.get('webpage_url')
+                    if not url and 'id' in entry: url = f"https://www.youtube.com/watch?v={entry['id']}"
+                    if url:
+                        tracks_to_add.append({'url': url, 'title': entry.get('title', 'Без названия'), 'user_id': ctx.author.id})
+                        added_count += 1
+                await ctx.send(f"✅ Добавлено **{added_count}** треков из плейлиста. (Лимит: {playlist_limit})", delete_after=10)
             else:
-                state.current_track = search
-                state.current_title = player.title
-                vc.play(player, after=lambda e: self.play_next(ctx))
-                await self.update_controls(ctx.guild.id, player.title)
+                # Одиночный трек
+                url = data.get('url') or data.get('webpage_url') or search
+                tracks_to_add.append({'url': url, 'title': data.get('title', 'Без названия'), 'user_id': ctx.author.id})
+
+            # Добавляем в очередь
+            for track in tracks_to_add:
+                if not vc.is_playing() and not vc.is_paused() and not state.current_track:
+                    state.current_track = track
+                    player = await YTDLSource.from_url(track['url'], loop=self.bot.loop, stream=True)
+                    vc.play(player, after=lambda e: self.play_next(ctx))
+                    await self.update_controls(ctx.guild.id, player.title)
+                else:
+                    state.queue.append(track)
+            
+            if len(tracks_to_add) == 1:
+                await ctx.send(f"➕ Добавлено: **{tracks_to_add[0]['title']}**", delete_after=10)
+            await self.update_controls(ctx.guild.id)
+
         except Exception as e:
             await ctx.send(f"❌ Ошибка: {e}")
 
@@ -177,17 +204,16 @@ class Music(commands.Cog):
         vc = ctx.voice_client
         if not vc: return
 
-        next_song = None
-        if state.repeat: next_song = state.current_track
-        elif state.queue: next_song = state.queue.pop(0)
+        next_track = None
+        if state.repeat: next_track = state.current_track
+        elif state.queue: next_track = state.queue.pop(0)
 
-        if next_song:
-            state.current_track = next_song
-            coro = YTDLSource.from_url(next_song, loop=self.bot.loop, stream=True)
+        if next_track:
+            state.current_track = next_track
+            coro = YTDLSource.from_url(next_track['url'], loop=self.bot.loop, stream=True)
             fut = asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
             try:
                 player = fut.result()
-                state.current_title = player.title
                 vc.play(player, after=lambda e: self.play_next(ctx))
                 asyncio.run_coroutine_threadsafe(self.update_controls(ctx.guild.id, player.title), self.bot.loop)
             except:
