@@ -79,8 +79,9 @@ class QuizView(View):
     async def on_timeout(self):
         if self.ended: return
         self.ended = True
-        self.stop()
-        for c in self.children: c.disabled = True
+        for c in self.children: 
+            if isinstance(c, Button) and c.label != "Закончить игру":
+                c.disabled = True
         
         # Списание коинов при тайм-ауте
         data = await db.get_user(str(self.member.id))
@@ -92,6 +93,7 @@ class QuizView(View):
                 await self.message.edit(content=f"⏰ **ВРЕМЯ ВЫШЛО!**\nПравильный ответ: `{self.q['a']}`\nШтраф за бездействие: **-{penalty} 🪙**", embed=None, view=self)
                 await asyncio.sleep(4)
                 if not self.game_over:
+                    self.stop()
                     await self._next_round(timeouts=self.consecutive_timeouts + 1)
         except: pass
 
@@ -141,7 +143,6 @@ class QuizBtn(Button):
             return
         if v.ended: return
         v.ended = True
-        v.stop()
         
         for c in v.children: 
             if isinstance(c, Button) and c.label != "Закончить игру":
@@ -164,6 +165,7 @@ class QuizBtn(Button):
         
         await asyncio.sleep(4)
         if not v.game_over:
+            v.stop()
             await v._next_round(timeouts=0)
 
 class QuizDuelView(View):
@@ -201,8 +203,9 @@ class QuizDuelView(View):
     async def on_timeout(self):
         if self.ended: return
         self.ended = True
-        self.stop()
-        for c in self.children: c.disabled = True
+        for c in self.children:
+            if isinstance(c, Button) and c.label != "Закончить дуэль":
+                c.disabled = True
         if self.message:
             penalty = self.bet
             for pid in self.p_ids:
@@ -211,6 +214,7 @@ class QuizDuelView(View):
             await self.message.edit(content="⏰ **ВРЕМЯ ВЫШЛО! Оба оштрафованы!**", embed=await self.create_embed(all_failed=True), view=self)
             await asyncio.sleep(5)
             if not self.game_over:
+                self.stop()
                 await self._next_round(timeouts=self.consecutive_timeouts + 1)
 
     async def _next_round(self, timeouts=0):
@@ -264,7 +268,6 @@ class QuizDuelBtn(Button):
             
         if self.correct:
             v.ended = True
-            v.stop()
             for c in v.children:
                 if isinstance(c, Button) and c.label != "Закончить дуэль":
                     c.disabled = True
@@ -283,6 +286,7 @@ class QuizDuelBtn(Button):
             await interaction.response.edit_message(content=f"🏆 **{interaction.user.mention} КРАСАВА!**", embed=await v.create_embed(winner=interaction.user.id, loser=loser_id), view=v)
             await asyncio.sleep(5)
             if not v.game_over:
+                v.stop()
                 await v._next_round(timeouts=0)
         else:
             v.players_wrong.add(interaction.user.id)
@@ -292,7 +296,6 @@ class QuizDuelBtn(Button):
             
             if len(v.players_wrong) >= len(v.p_ids):
                 v.ended = True
-                v.stop()
                 for c in v.children: 
                     if isinstance(c, Button) and c.label != "Закончить дуэль" and hasattr(c, 'correct') and c.correct: c.style = discord.ButtonStyle.success
                     if isinstance(c, Button) and c.label != "Закончить дуэль": c.disabled = True
@@ -304,6 +307,7 @@ class QuizDuelBtn(Button):
                 await interaction.response.edit_message(content="💀 **ОБА ОШИБЛИСЬ! Минус коины.**", embed=await v.create_embed(all_failed=True), view=v)
                 await asyncio.sleep(5)
                 if not v.game_over:
+                    v.stop()
                     await v._next_round(timeouts=0)
             else:
                 await interaction.response.edit_message(embed=await v.create_embed(), view=v)
