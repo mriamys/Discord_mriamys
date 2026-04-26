@@ -164,6 +164,9 @@ class Music(commands.Cog):
             # Сначала получаем инфо (быстро)
             data = await self.bot.loop.run_in_executor(None, lambda: ytdl.extract_info(search, download=False, process=False))
             
+            if not data:
+                return await ctx.send("❌ Не удалось найти информацию по вашему запросу.", delete_after=10)
+            
             tracks_to_add = []
             if 'entries' in data:
                 # Это плейлист
