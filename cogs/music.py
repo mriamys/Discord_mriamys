@@ -214,24 +214,33 @@ class Music(commands.Cog):
 
             if not tracks_to_add:
                 return await ctx.send("❌ Не удалось получить информацию о треках.", delete_after=10)
+# Добавляем в очередь
+started_playing = False
+for track in tracks_to_add:
+    if not vc.is_playing() and not vc.is_paused() and not state.current_track:
+        state.current_track = track
+        player = await YTDLSource.from_url(track['url'], loop=self.bot.loop, stream=True)
+        if player:
+            vc.play(player, after=lambda e: self.play_next(ctx))
+            await self.update_controls(ctx.guild.id, player.title)
+            started_playing = True
+        else:
+            state.current_track = None
+    else:
+        state.queue.append(track)
 
-            for track in tracks_to_add:
-                if not vc.is_playing() and not vc.is_paused() and not state.current_track:
-                    state.current_track = track
-                    player = await YTDLSource.from_url(track['url'], loop=self.bot.loop, stream=True)
-                    if player:
-                        vc.play(player, after=lambda e: self.play_next(ctx))
-                        await self.update_controls(ctx.guild.id, player.title)
-                    else:
-                        state.current_track = None
-                else:
-                    state.queue.append(track)
-            
-            if len(tracks_to_add) == 1 and 'ytsearch' not in search:
-                await ctx.send(f"➕ Добавлено: **{tracks_to_add[0]['title']}**", delete_after=10)
-            
-            if state.current_track:
-                await self.update_controls(ctx.guild.id)
+# Уведомления пользователю
+if len(tracks_to_add) > 1:
+    # Если это был плейлист
+    await ctx.send(f"✅ Добавлено **{len(tracks_to_add)}** треков в очередь. (Лимит: {playlist_limit})", delete_after=10)
+elif len(tracks_to_add) == 1 and not started_playing:
+    # Если один трек добавлен в уже играющую очередь
+    await ctx.send(f"➕ Добавлено в очередь: **{tracks_to_add[0]['title']}**", delete_after=10)
+
+# Обновляем плеер, чтобы показать новое кол-во треков в очереди
+if state.current_track:
+    await self.update_controls(ctx.guild.id)
+
 
         except Exception as e:
             logging.error(f"Play error: {e}")
