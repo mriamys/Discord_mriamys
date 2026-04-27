@@ -255,6 +255,7 @@ class Economy(commands.Cog):
         last_daily = user_data.get('last_daily')
         streak = user_data.get('streak', 0)
         last_daily_date = None
+        streak_xp_bonus = 0
         if last_daily:
             if isinstance(last_daily, str): last_daily = datetime.strptime(str(last_daily).split('.')[0], '%Y-%m-%d %H:%M:%S')
             last_daily_date = last_daily.replace(tzinfo=ZoneInfo("UTC")).astimezone(kyiv_tz).date()
@@ -264,10 +265,31 @@ class Economy(commands.Cog):
             if last_daily_date == today - timedelta(days=1): streak += 1
             else: streak = 1
             last_daily = datetime.utcnow()
-            streak_bonus = min(streak * 100, 3000)
+            streak_bonus = min(streak * 100, 5000)
+            streak_xp_bonus = streak_bonus // 2
+            
             if u:
-                try: await u.send(f"🔥 Твой войс-стрик обновлен! День: **{streak}**, Бонус: **{streak_bonus} 🪙**")
-                except: pass
+                embed = discord.Embed(
+                    title="🔥 ТВОЙ ВОЙС-СТРИК ОБНОВЛЕН!",
+                    description=f"Твоя серия общения продолжается! День: **{streak}**\n\nБонус за сегодня:\n💰 **{streak_bonus} 🪙**\n⭐ **{streak_xp_bonus} XP**",
+                    color=0xFF4500
+                )
+                
+                # Попытка выдать ежедневное задание
+                tasks_cog = self.bot.get_cog("DailyTasks")
+                if tasks_cog:
+                    new_task = await tasks_cog.assign_new_task(u)
+                    if new_task:
+                        embed.add_field(
+                            name="🌟 НОВОЕ ЗАДАНИЕ",
+                            value=f"**{new_task['name']}**\n└ {new_task['desc']}\n\n💰 Награда: **{new_task['reward_coins']} 🪙** | **{new_task['reward_xp']} XP**",
+                            inline=False
+                        )
+                
+                try:
+                    await u.send(embed=embed)
+                except:
+                    pass
                 self.bot.dispatch("streak_updated", u, streak)
 
         # Проверка буста
@@ -283,7 +305,7 @@ class Economy(commands.Cog):
 
         coins_add = (delta_minutes * 6) + streak_bonus
         xp_base = (delta_minutes * 10)
-        xp_add = xp_base * xp_multiplier
+        xp_add = (xp_base * xp_multiplier) + streak_xp_bonus
         
         boost_xp_stats = user_data.get('xp_boost_xp_gained', 0)
         boost_coins_stats = user_data.get('xp_boost_coins_gained', 0)
