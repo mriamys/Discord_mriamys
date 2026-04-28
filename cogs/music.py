@@ -36,6 +36,9 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.data = data
         self.title = data.get('title')
         self.url = data.get('url')
+        self.duration = data.get('duration')
+        self.uploader = data.get('uploader')
+        self.thumbnail = data.get('thumbnail')
 
     @classmethod
     async def from_url(cls, url, *, loop=None, stream=False):
@@ -75,7 +78,11 @@ class MusicControlView(View):
             return False
         vc = interaction.guild.voice_client
         if vc and interaction.user.voice.channel != vc.channel:
-            await interaction.response.send_message(f"❌ Нужно быть в канале с ботом!", ephemeral=True)
+            # If bot is alone in channel, allow moving
+            if len(vc.channel.members) == 1:
+                await vc.move_to(interaction.user.voice.channel)
+                return True
+            await interaction.response.send_message(f"❌ Нужно быть в одном канале с ботом!", ephemeral=True)
             return False
         return True
 
@@ -101,12 +108,11 @@ class MusicControlView(View):
             await interaction.response.defer()
 
     @discord.ui.button(label="Повтор", emoji="🔄", style=discord.ButtonStyle.secondary)
-    async def repeat(self, interaction: discord.Interaction, button: Button):
+    async def repeat_btn(self, interaction: discord.Interaction, button: Button):
         state = self.cog.get_state(self.guild_id)
         state.repeat = not state.repeat
         button.style = discord.ButtonStyle.primary if state.repeat else discord.ButtonStyle.secondary
-        title = state.current_track['title'] if state.current_track else "Ничего не играет"
-        await interaction.response.edit_message(embed=self.cog.create_embed(state, title), view=self)
+        await interaction.response.edit_message(embed=self.cog.create_embed(state, state.current_track), view=self)
 
     @discord.ui.button(label="Стоп", emoji="⏹️", style=discord.ButtonStyle.danger)
     async def stop(self, interaction: discord.Interaction, button: Button):
@@ -116,7 +122,12 @@ class MusicControlView(View):
             state.queue = []
             state.current_track = None
             await vc.disconnect()
-            await interaction.response.edit_message(content="⏹️ Плеер остановлен.", embed=None, view=None)
+            if state.controls_msg:
+                try:
+                    await state.controls_msg.delete()
+                except: pass
+                state.controls_msg = None
+            await interaction.response.send_message("⏹️ Плеер остановлен.", ephemeral=True)
 
 class Music(commands.Cog):
     def __init__(self, bot):
@@ -127,6 +138,14 @@ class Music(commands.Cog):
         if guild_id not in self.states:
             self.states[guild_id] = GuildState()
         return self.states[guild_id]
+
+    def format_duration(self, seconds):
+        if not seconds: return "Стрим"
+        minutes, seconds = divmod(int(seconds), 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
 
     async def get_spotify_track_info(self, url):
         async with aiohttp.ClientSession() as session:
@@ -142,22 +161,47 @@ class Music(commands.Cog):
                 logging.error(f"Spotify parse error: {e}")
         return None
 
-    def create_embed(self, state, title):
-        embed = discord.Embed(title="🎵 Плеер", description=f"▶️ **{title}**", color=COLOR_SUCCESS)
-        embed.add_field(name="В очереди", value=f"{len(state.queue)} треков", inline=True)
-        embed.add_field(name="Повтор", value="✅ Вкл" if state.repeat else "❌ Выкл", inline=True)
+    def create_embed(self, state, track_data):
+        if not track_data:
+            return discord.Embed(title="🎵 Плеер", description="Ничего не играет", color=COLOR_SUCCESS)
+        
+        title = track_data.get('title', 'Без названия')
+        uploader = track_data.get('uploader', 'Неизвестно')
+        duration = self.format_duration(track_data.get('duration'))
+        thumbnail = track_data.get('thumbnail')
+        requester = f"<@{track_data['user_id']}>" if 'user_id' in track_data else "Система"
+
+        embed = discord.Embed(title="🎵 Сейчас играет", description=f"**[{title}]({track_data.get('url')})**", color=COLOR_SUCCESS)
+        if thumbnail:
+            embed.set_thumbnail(url=thumbnail)
+        
+        embed.add_field(name="👤 Автор", value=uploader, inline=True)
+        embed.add_field(name="🕒 Длительность", value=duration, inline=True)
+        embed.add_field(name="🎧 Заказал", value=requester, inline=True)
+        
+        queue_len = len(state.queue)
+        embed.add_field(name="📜 Очередь", value=f"{queue_len} треков", inline=True)
+        embed.add_field(name="🔄 Повтор", value="✅ Вкл" if state.repeat else "❌ Выкл", inline=True)
+        
         return embed
 
-    async def update_controls(self, guild_id, title=None):
+    async def update_controls(self, guild_id, track_data=None):
         state = self.get_state(guild_id)
-        if not state.message_channel or not state.current_track: return
-        embed = self.create_embed(state, title or state.current_track['title'])
+        if not state.message_channel: return
+        
+        current_data = track_data or state.current_track
+        if not current_data: return
+
+        embed = self.create_embed(state, current_data)
         view = MusicControlView(self, guild_id)
+        
         if state.controls_msg:
             try:
                 await state.controls_msg.edit(embed=embed, view=view)
                 return
-            except: pass
+            except: 
+                state.controls_msg = None
+        
         state.controls_msg = await state.message_channel.send(embed=embed, view=view)
 
     @commands.hybrid_command(name="play", description="Играть музыку/плейлист")
@@ -168,7 +212,17 @@ class Music(commands.Cog):
         await ctx.defer()
         state = self.get_state(ctx.guild.id)
         state.message_channel = ctx.channel
-        vc = ctx.voice_client or await ctx.author.voice.channel.connect()
+        
+        vc = ctx.voice_client
+        if not vc:
+            vc = await ctx.author.voice.channel.connect()
+        else:
+            # Check if we should move immediately
+            # Move if: bot is not playing OR current channel has no humans (other than bot)
+            listeners = [m for m in vc.channel.members if not m.bot]
+            if not vc.is_playing() or not listeners:
+                if vc.channel != ctx.author.voice.channel:
+                    await vc.move_to(ctx.author.voice.channel)
 
         if "spotify.com/track" in search:
             await ctx.send("🔍 Парсим Spotify...", delete_after=5)
@@ -189,21 +243,55 @@ class Music(commands.Cog):
             
             tracks_to_add = []
             if 'entries' in data and data['entries']:
+                # It's a playlist or search results
+                is_search = data.get('_type') == 'playlist' and 'ytsearch' in search
                 entries = list(data['entries'])
-                added_count = 0
-                for entry in entries:
-                    if not entry: continue
-                    if added_count >= playlist_limit: break
-                    url = entry.get('url') or entry.get('webpage_url')
-                    if not url and 'id' in entry: url = f"https://www.youtube.com/watch?v={entry['id']}"
-                    if url:
-                        tracks_to_add.append({'url': url, 'title': entry.get('title', 'Без названия'), 'user_id': ctx.author.id})
+                
+                if is_search:
+                    # If it was a search, just take the first result
+                    entry = entries[0]
+                    url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={entry['id']}"
+                    tracks_to_add.append({
+                        'url': url, 
+                        'title': entry.get('title', 'Без названия'), 
+                        'uploader': entry.get('uploader', 'Неизвестно'),
+                        'duration': entry.get('duration'),
+                        'thumbnail': entry.get('thumbnail'),
+                        'user_id': ctx.author.id
+                    })
+                else:
+                    # It's a real playlist
+                    added_count = 0
+                    for entry in entries:
+                        if not entry: continue
+                        if added_count >= playlist_limit: break
+                        url = entry.get('url') or entry.get('webpage_url') or f"https://www.youtube.com/watch?v={entry['id']}"
+                        tracks_to_add.append({
+                            'url': url, 
+                            'title': entry.get('title', 'Без названия'), 
+                            'uploader': entry.get('uploader', 'Неизвестно'),
+                            'duration': entry.get('duration'),
+                            'thumbnail': entry.get('thumbnail'),
+                            'user_id': ctx.author.id
+                        })
                         added_count += 1
             else:
+                # Single track
                 url = data.get('url') or data.get('webpage_url') or search
-                tracks_to_add.append({'url': url, 'title': data.get('title', 'Без названия'), 'user_id': ctx.author.id})
+                tracks_to_add.append({
+                    'url': url, 
+                    'title': data.get('title', 'Без названия'), 
+                    'uploader': data.get('uploader', 'Неизвестно'),
+                    'duration': data.get('duration'),
+                    'thumbnail': data.get('thumbnail'),
+                    'user_id': ctx.author.id
+                })
 
             if not tracks_to_add: return await ctx.send("❌ Не удалось найти треки.")
+
+            # Auto-disable repeat when adding new tracks
+            if state.repeat:
+                state.repeat = False
 
             started_playing = False
             for track in tracks_to_add:
@@ -211,10 +299,17 @@ class Music(commands.Cog):
                     state.current_track = track
                     player = await YTDLSource.from_url(track['url'], loop=self.bot.loop, stream=True)
                     if player:
+                        # Update current_track with more detailed info from player if available
+                        state.current_track['title'] = player.title
+                        state.current_track['uploader'] = player.uploader
+                        state.current_track['duration'] = player.duration
+                        state.current_track['thumbnail'] = player.thumbnail
+                        
                         vc.play(player, after=lambda e: self.play_next(ctx))
-                        await self.update_controls(ctx.guild.id, player.title)
+                        await self.update_controls(ctx.guild.id)
                         started_playing = True
-                    else: state.current_track = None
+                    else: 
+                        state.current_track = None
                 else:
                     state.queue.append(track)
             
@@ -233,25 +328,95 @@ class Music(commands.Cog):
         state = self.get_state(ctx.guild.id)
         vc = ctx.voice_client
         if not vc: return
+        
         next_track = None
-        if state.repeat: next_track = state.current_track
-        elif state.queue: next_track = state.queue.pop(0)
+        if state.repeat and state.current_track: 
+            next_track = state.current_track
+        elif state.queue: 
+            next_track = state.queue.pop(0)
+            
         if next_track:
             state.current_track = next_track
+            
+            # Smart move: if requester is in a different voice channel, move there
+            user_id = next_track.get('user_id')
+            if user_id:
+                guild = self.bot.get_guild(ctx.guild.id)
+                member = guild.get_member(user_id)
+                if member and member.voice and member.voice.channel:
+                    if vc.channel != member.voice.channel:
+                        # Move to requester's channel
+                        asyncio.run_coroutine_threadsafe(vc.move_to(member.voice.channel), self.bot.loop)
+
             coro = YTDLSource.from_url(next_track['url'], loop=self.bot.loop, stream=True)
             fut = asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
             try:
                 player = fut.result()
                 if player:
+                    state.current_track['title'] = player.title
+                    state.current_track['uploader'] = player.uploader
+                    state.current_track['duration'] = player.duration
+                    state.current_track['thumbnail'] = player.thumbnail
+                    
                     vc.play(player, after=lambda e: self.play_next(ctx))
-                    asyncio.run_coroutine_threadsafe(self.update_controls(ctx.guild.id, player.title), self.bot.loop)
-                else: self.play_next(ctx)
-            except: self.play_next(ctx)
+                    asyncio.run_coroutine_threadsafe(self.update_controls(ctx.guild.id), self.bot.loop)
+                else: 
+                    self.play_next(ctx)
+            except Exception as e:
+                logging.error(f"Play next error: {e}")
+                self.play_next(ctx)
         else:
             state.current_track = None
-            asyncio.run_coroutine_threadsafe(vc.disconnect(), self.bot.loop)
+            if vc.is_connected():
+                asyncio.run_coroutine_threadsafe(vc.disconnect(), self.bot.loop)
             if state.controls_msg:
                 asyncio.run_coroutine_threadsafe(state.controls_msg.edit(content="⏹️ Очередь пуста.", embed=None, view=None), self.bot.loop)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if member.id == self.bot.user.id and after.channel is None:
+            # Bot was disconnected
+            state = self.get_state(member.guild.id)
+            state.queue = []
+            state.current_track = None
+            if state.controls_msg:
+                try: await state.controls_msg.delete()
+                except: pass
+                state.controls_msg = None
+
+    @commands.hybrid_command(name="queue", description="Показать очередь воспроизведения")
+    async def queue(self, ctx):
+        state = self.get_state(ctx.guild.id)
+        if not state.queue and not state.current_track:
+            return await ctx.send("Очередь пуста.")
+        
+        embed = discord.Embed(title="📜 Очередь воспроизведения", color=COLOR_SUCCESS)
+        if state.current_track:
+            embed.add_field(name="▶️ Сейчас играет", value=state.current_track.get('title', 'Без названия'), inline=False)
+        
+        if state.queue:
+            queue_list = ""
+            for i, track in enumerate(state.queue[:10], 1):
+                queue_list += f"{i}. {track.get('title', 'Без названия')}\n"
+            if len(state.queue) > 10:
+                queue_list += f"... и еще {len(state.queue) - 10} треков"
+            embed.add_field(name="📋 Будущие треки", value=queue_list, inline=False)
+        else:
+            embed.add_field(name="📋 Будущие треки", value="Очередь пуста", inline=False)
+            
+        await ctx.send(embed=embed)
+
+    @commands.hybrid_command(name="stop", description="Остановить плеер и очистить очередь")
+    async def stop_cmd(self, ctx):
+        state = self.get_state(ctx.guild.id)
+        vc = ctx.voice_client
+        if vc:
+            state.queue = []
+            state.current_track = None
+            await vc.disconnect()
+            await ctx.send("⏹️ Плеер остановлен, очередь очищена.")
+        else:
+            await ctx.send("❌ Бот не в голосовом канале.")
 
 async def setup(bot):
     await bot.add_cog(Music(bot))
