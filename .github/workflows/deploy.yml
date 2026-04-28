@@ -7,18 +7,13 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: root
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /root/Discord_mriamys
-            git pull origin master
-            source /root/shared_env/bin/activate
-            pip install -r requirements.txt
-            systemctl restart mriamys
+      - name: Deploy code
+        run: |
+          cd /root/Discord_mriamys
+          git pull origin master
+          source /root/shared_env/bin/activate
+          pip install -r requirements.txt
+          systemctl restart mriamys
