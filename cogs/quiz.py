@@ -211,23 +211,28 @@ class QuizBtn(Button):
                 if hasattr(c, 'correct') and c.correct: c.style = discord.ButtonStyle.success
                 elif c.label == self.label: c.style = discord.ButtonStyle.danger
         
-        data = await db.get_user(str(v.member.id))
-        if self.correct:
-            reward = int(v.bet * random.uniform(1.1, 2.5))
-            new_correct = data.get('quiz_correct', 0) + 1
-            await db.update_user(str(v.member.id), vibecoins=data['vibecoins'] + reward, quiz_correct=new_correct)
-            v.bot.dispatch("quiz_answered", v.member, True, new_correct)
-            await interaction.response.edit_message(content=f"✅ **ВЕРНО!** Ты заработал **{reward} 🪙**", embed=await v.create_embed(status=f"Правильно: `{v.q['a']}`\nПриз: **+{reward} 🪙**", color=COLOR_SUCCESS), view=v)
-        else:
-            penalty = v.bet
-            await db.update_user(str(v.member.id), vibecoins=max(0, data['vibecoins'] - penalty))
-            v.bot.dispatch("quiz_answered", v.member, False, data.get('quiz_correct', 0))
-            await interaction.response.edit_message(content=f"❌ **ОШИБКА!**", embed=await v.create_embed(status=f"Твой ответ: `{self.label}`\nПравильный: `{v.q['a']}`\nШтраф: **-{penalty} 🪙**", color=COLOR_ERROR), view=v)
-        
-        await asyncio.sleep(4)
-        if not v.game_over:
-            v.stop()
-            await v._next_round(timeouts=0)
+        try:
+            data = await db.get_user(str(v.member.id))
+            if self.correct:
+                reward = int(v.bet * random.uniform(1.1, 2.5))
+                new_correct = data.get('quiz_correct', 0) + 1
+                await db.update_user(str(v.member.id), vibecoins=data['vibecoins'] + reward, quiz_correct=new_correct)
+                v.bot.dispatch("quiz_answered", v.member, True, new_correct)
+                await interaction.response.edit_message(content=f"✅ **ВЕРНО!** Ты заработал **{reward} 🪙**", embed=await v.create_embed(status=f"Правильно: `{v.q['a']}`\nПриз: **+{reward} 🪙**", color=COLOR_SUCCESS), view=v)
+            else:
+                penalty = v.bet
+                await db.update_user(str(v.member.id), vibecoins=max(0, data['vibecoins'] - penalty))
+                v.bot.dispatch("quiz_answered", v.member, False, data.get('quiz_correct', 0))
+                await interaction.response.edit_message(content=f"❌ **ОШИБКА!**", embed=await v.create_embed(status=f"Твой ответ: `{self.label}`\nПравильный: `{v.q['a']}`\nШтраф: **-{penalty} 🪙**", color=COLOR_ERROR), view=v)
+            
+            await asyncio.sleep(4)
+            if not v.game_over:
+                v.stop()
+                await v._next_round(timeouts=0)
+        except Exception as e:
+            print(f"[Quiz Solo] Callback error: {e}")
+            v.game_over = True
+            await v._return_to_menu()
 
 class QuizDuelView(View):
     def __init__(self, bot, p1, p2, bet, q, consecutive_timeouts=0):
@@ -289,10 +294,25 @@ class QuizDuelView(View):
             await self._return_to_menu()
             return
             
-        new_q = await fetch_question()
-        new_v = QuizDuelView(self.bot, self.p1, self.p2, self.bet, new_q, consecutive_timeouts=timeouts)
-        new_msg = await self.message.channel.send(content=f"⚔️ {self.p1.mention} 🆚 {self.p2.mention}\n💡 **Новый раунд!** Ставка: {self.bet} 🪙", embed=await new_v.create_embed(), view=new_v)
-        new_v.message = new_msg
+        try:
+            new_q = await fetch_question()
+            new_v = QuizDuelView(self.bot, self.p1, self.p2, self.bet, new_q, consecutive_timeouts=timeouts)
+            
+            # Retry logic for sending the message
+            for i in range(2):
+                try:
+                    new_msg = await self.message.channel.send(content=f"⚔️ {self.p1.mention} 🆚 {self.p2.mention}\n💡 **Новый раунд!** Ставка: {self.bet} 🪙", embed=await new_v.create_embed(), view=new_v)
+                    new_v.message = new_msg
+                    return
+                except discord.HTTPException:
+                    if i == 0: await asyncio.sleep(2)
+                    else: raise
+        except Exception as e:
+            print(f"[Quiz Duel] Next round error: {e}")
+            self.game_over = True
+            try: await self.message.channel.send("⚠️ Ошибка связи с Discord. Дуэль окончена.")
+            except: pass
+            await self._return_to_menu()
 
     async def _exit_callback(self, interaction: discord.Interaction):
         if interaction.user.id not in self.p_ids:
