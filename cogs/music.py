@@ -305,7 +305,7 @@ class Music(commands.Cog):
                         state.current_track['duration'] = player.duration
                         state.current_track['thumbnail'] = player.thumbnail
                         
-                        vc.play(player, after=lambda e: self.play_next(ctx))
+                        vc.play(player, after=lambda e: self.play_next(ctx, e))
                         await self.update_controls(ctx.guild.id)
                         started_playing = True
                     else: 
@@ -324,7 +324,13 @@ class Music(commands.Cog):
             logging.error(f"Play error: {e}")
             await ctx.send(f"❌ Ошибка при поиске.")
 
-    def play_next(self, ctx):
+    def play_next(self, ctx, error=None):
+        if error:
+            logging.error(f"Player error: {error}")
+        # Run the async playback logic on the event loop, avoiding blocking the voice thread
+        asyncio.run_coroutine_threadsafe(self.async_play_next(ctx), self.bot.loop)
+
+    async def async_play_next(self, ctx):
         state = self.get_state(ctx.guild.id)
         vc = ctx.voice_client
         if not vc: return
@@ -346,20 +352,18 @@ class Music(commands.Cog):
                 if member and member.voice and member.voice.channel:
                     if vc.channel != member.voice.channel:
                         # Move to requester's channel
-                        asyncio.run_coroutine_threadsafe(vc.move_to(member.voice.channel), self.bot.loop)
+                        await vc.move_to(member.voice.channel)
 
-            coro = YTDLSource.from_url(next_track['url'], loop=self.bot.loop, stream=True)
-            fut = asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
             try:
-                player = fut.result()
+                player = await YTDLSource.from_url(next_track['url'], loop=self.bot.loop, stream=True)
                 if player:
                     state.current_track['title'] = player.title
                     state.current_track['uploader'] = player.uploader
                     state.current_track['duration'] = player.duration
                     state.current_track['thumbnail'] = player.thumbnail
                     
-                    vc.play(player, after=lambda e: self.play_next(ctx))
-                    asyncio.run_coroutine_threadsafe(self.update_controls(ctx.guild.id), self.bot.loop)
+                    vc.play(player, after=lambda e: self.play_next(ctx, e))
+                    await self.update_controls(ctx.guild.id)
                 else: 
                     self.play_next(ctx)
             except Exception as e:
@@ -368,9 +372,12 @@ class Music(commands.Cog):
         else:
             state.current_track = None
             if vc.is_connected():
-                asyncio.run_coroutine_threadsafe(vc.disconnect(), self.bot.loop)
+                await vc.disconnect()
             if state.controls_msg:
-                asyncio.run_coroutine_threadsafe(state.controls_msg.edit(content="⏹️ Очередь пуста.", embed=None, view=None), self.bot.loop)
+                try:
+                    await state.controls_msg.edit(content="⏹️ Очередь пуста.", embed=None, view=None)
+                except:
+                    pass
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
