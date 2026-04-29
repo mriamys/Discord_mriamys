@@ -122,12 +122,8 @@ class MusicControlView(View):
             state.queue = []
             state.current_track = None
             await vc.disconnect()
-            if state.controls_msg:
-                try:
-                    await state.controls_msg.delete()
-                except: pass
-                state.controls_msg = None
-            await interaction.response.send_message("⏹️ Плеер остановлен.", ephemeral=True)
+            state.controls_msg = None
+            await interaction.response.edit_message(content="⏹️ Плеер остановлен.", embed=None, view=None)
 
 class Music(commands.Cog):
     def __init__(self, bot):
@@ -317,6 +313,8 @@ class Music(commands.Cog):
                 await ctx.send(f"✅ Добавлено **{len(tracks_to_add)}** треков. (Лимит: {playlist_limit})", delete_after=10)
             elif not started_playing:
                 await ctx.send(f"➕ Добавлено в очередь: **{tracks_to_add[0]['title']}**", delete_after=10)
+            else:
+                await ctx.send(f"▶️ Начинаю играть: **{tracks_to_add[0]['title']}**", delete_after=10)
             
             if state.current_track: await self.update_controls(ctx.guild.id)
 
@@ -387,7 +385,7 @@ class Music(commands.Cog):
             state.queue = []
             state.current_track = None
             if state.controls_msg:
-                try: await state.controls_msg.delete()
+                try: await state.controls_msg.edit(content="⏹️ Плеер остановлен (бот отключен).", embed=None, view=None)
                 except: pass
                 state.controls_msg = None
 
