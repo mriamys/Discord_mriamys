@@ -9,28 +9,31 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+
 class AudioMemes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.active_trolls = {} # { user_id: { 'count': 0, 'end_time': timestamp } }
+        self.active_trolls = {}  # { user_id: { 'count': 0, 'end_time': timestamp } }
         self.troll_loop.start()
 
     def cog_unload(self):
         self.troll_loop.cancel()
 
     @commands.Cog.listener()
-    async def on_voice_meme_purchased(self, user: discord.Member, channel: discord.VoiceChannel):
+    async def on_voice_meme_purchased(
+        self, user: discord.Member, channel: discord.VoiceChannel
+    ):
         """Событие покупки аудио-троллинга."""
         self.active_trolls[user.id] = {
-            'count': 0,
-            'end_time': datetime.utcnow().timestamp() + 3600 # 1 час
+            "count": 0,
+            "end_time": datetime.utcnow().timestamp() + 3600,  # 1 час
         }
-        
+
         # Статистика для ачивок (общая)
         user_data = await db.get_user(str(user.id))
-        memes_ordered = user_data.get('memes_ordered', 0) + 1
+        memes_ordered = user_data.get("memes_ordered", 0) + 1
         await db.update_user(str(user.id), memes_ordered=memes_ordered)
-        
+
         # Диспатчим ивент для ачивок
         self.bot.dispatch("meme_ordered", user, memes_ordered)
 
@@ -38,16 +41,16 @@ class AudioMemes(commands.Cog):
     async def troll_loop(self):
         """Цикл проверки активных заказов на троллинг."""
         now = datetime.utcnow().timestamp()
-        
+
         # На первом запуске загружаем из БД
-        if not hasattr(self, '_initial_loaded'):
+        if not hasattr(self, "_initial_loaded"):
             active_from_db = await db.get_active_voice_memes()
             for row in active_from_db:
-                uid = int(row['user_id'])
+                uid = int(row["user_id"])
                 if uid not in self.active_trolls:
                     self.active_trolls[uid] = {
-                        'count': row['voice_memes_count'],
-                        'end_time': row['voice_memes_until'].timestamp()
+                        "count": row["voice_memes_count"],
+                        "end_time": row["voice_memes_until"].timestamp(),
                     }
             self._initial_loaded = True
 
@@ -56,22 +59,24 @@ class AudioMemes(commands.Cog):
         for user_id, data in list(self.active_trolls.items()):
             # Проверяем условия окончания
             reason = None
-            if data['count'] >= 10:
+            if data["count"] >= 10:
                 reason = "лимит проигрываний (10/10) исчерпан"
-            elif now > data['end_time']:
+            elif now > data["end_time"]:
                 reason = "время действия (1 час) истекло"
 
             if reason:
                 to_remove.append(user_id)
                 # Уведомляем пользователя
-                guild = self.bot.get_guild(next(iter(self.bot.guilds)).id) # Предполагаем основную гильдию
+                guild = self.bot.get_guild(
+                    next(iter(self.bot.guilds)).id
+                )  # Предполагаем основную гильдию
                 if guild:
                     member = guild.get_member(user_id)
                     if member:
                         embed = discord.Embed(
                             title="🔊 Рандом высер окончен",
                             description=f"Твой аудио-троллинг завершен, так как {reason}.\nНадеемся, это было весело! 🤡",
-                            color=0x2b2d31
+                            color=0x2B2D31,
                         )
                         chan = discord.utils.get(guild.text_channels, name="📜┃ранг")
                         try:
@@ -79,10 +84,13 @@ class AudioMemes(commands.Cog):
                                 await chan.send(content=member.mention, embed=embed)
                             else:
                                 await member.send(embed=embed)
-                        except: pass
-                
+                        except:
+                            pass
+
                 # Чистим в БД
-                await db.update_user(str(user_id), voice_memes_until=None, voice_memes_count=0)
+                await db.update_user(
+                    str(user_id), voice_memes_until=None, voice_memes_count=0
+                )
                 continue
 
             # Шанс 40% каждые 2 минуты зайти и проиграть мем
@@ -91,20 +99,23 @@ class AudioMemes(commands.Cog):
                 member = None
                 for g in self.bot.guilds:
                     member = g.get_member(user_id)
-                    if member: break
-                    
+                    if member:
+                        break
+
                 if not member or not member.voice or not member.voice.channel:
-                    continue 
-                
+                    continue
+
                 channel = member.voice.channel
                 guild = member.guild
-                
+
                 # Пробуем зайти и сыграть
                 self.bot.loop.create_task(self.play_meme(channel, guild))
-                
+
                 # Инкрементируем и сохраняем
-                self.active_trolls[user_id]['count'] += 1
-                await db.update_user(str(user_id), voice_memes_count=self.active_trolls[user_id]['count'])
+                self.active_trolls[user_id]["count"] += 1
+                await db.update_user(
+                    str(user_id), voice_memes_count=self.active_trolls[user_id]["count"]
+                )
 
         for uid in to_remove:
             if uid in self.active_trolls:
@@ -119,15 +130,20 @@ class AudioMemes(commands.Cog):
         import aiohttp
         import re
         import random
+
         page = random.randint(1, 30)
         url = f"https://www.myinstants.com/ru/index/ua/?page={page}"
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers={'User-Agent': 'Mozilla/5.0'}) as resp:
+                async with session.get(
+                    url, headers={"User-Agent": "Mozilla/5.0"}
+                ) as resp:
                     if resp.status == 200:
                         html = await resp.text()
                         # Парсим пути к mp3 файлам (используем set для удаления дубликатов)
-                        matches = list(set(re.findall(r"/media/sounds/[^\".']+\.mp3", html)))
+                        matches = list(
+                            set(re.findall(r"/media/sounds/[^\".']+\.mp3", html))
+                        )
                         if matches:
                             return "https://www.myinstants.com" + random.choice(matches)
         except Exception as e:
@@ -137,7 +153,7 @@ class AudioMemes(commands.Cog):
     async def play_meme(self, channel: discord.VoiceChannel, guild: discord.Guild):
         """Проигрывание случайного мема в голосовом канале."""
         meme_source = None
-        
+
         # Пробуем сначала спарсить из веб
         meme_url = await self.get_random_meme_url()
         if meme_url:
@@ -146,16 +162,20 @@ class AudioMemes(commands.Cog):
             # Фолбэк на локальные файлы, если сайт отвалился
             audio_dir = "audio/memes"
             if os.path.exists(audio_dir):
-                files = [f for f in os.listdir(audio_dir) if f.endswith(('.mp3', '.wav', '.ogg'))]
+                files = [
+                    f
+                    for f in os.listdir(audio_dir)
+                    if f.endswith((".mp3", ".wav", ".ogg"))
+                ]
                 if files:
                     meme_source = os.path.join(audio_dir, random.choice(files))
-                    
+
         if not meme_source:
             return
 
         # Пытаемся подключиться
         voice_client = discord.utils.get(self.bot.voice_clients, guild=guild)
-        
+
         try:
             if not voice_client:
                 voice_client = await channel.connect()
@@ -166,23 +186,23 @@ class AudioMemes(commands.Cog):
             return
 
         if voice_client.is_playing():
-            return # Уже что-то играет
-            
+            return  # Уже что-то играет
+
         try:
             # Ограничиваем время воспроизведения до 10 секунд (через параметры FFmpeg)
             audio_source = discord.FFmpegPCMAudio(
                 source=meme_source,
-                options="-t 10"  # Форсированно обрываем через 10 секунд, если мем слишком длинный
+                options="-t 10",  # Форсированно обрываем через 10 секунд, если мем слишком длинный
             )
             voice_client.play(audio_source)
-            
+
             # Ждем пока доиграет
             while voice_client.is_playing():
                 await asyncio.sleep(1)
-                
+
         except Exception as e:
             logger.error(f"Ошибка воспроизведения мема: {e}")
-            
+
         # Отключаемся с небольшой задержкой
         await asyncio.sleep(1)
         if voice_client and voice_client.is_connected():
@@ -194,7 +214,12 @@ class AudioMemes(commands.Cog):
         for user_id in self.active_trolls:
             for guild in self.bot.guilds:
                 m = guild.get_member(user_id)
-                if m and m.voice and m.voice.channel and m.voice.channel.id == channel_id:
+                if (
+                    m
+                    and m.voice
+                    and m.voice.channel
+                    and m.voice.channel.id == channel_id
+                ):
                     return True
         return False
 

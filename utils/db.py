@@ -3,6 +3,7 @@ import logging
 import asyncio
 from config import DB_HOST, DB_USER, DB_PASS, DB_NAME
 
+
 class Database:
     def __init__(self):
         self.pool = None
@@ -16,7 +17,7 @@ class Database:
                 password=DB_PASS,
                 db=DB_NAME,
                 autocommit=True,
-                cursorclass=aiomysql.DictCursor
+                cursorclass=aiomysql.DictCursor,
             )
             logging.info("Connected to MySQL Database!")
         except Exception as e:
@@ -27,7 +28,7 @@ class Database:
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 # Основная таблица пользователей
-                await cur.execute('''
+                await cur.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         user_id VARCHAR(25) PRIMARY KEY,
                         xp FLOAT DEFAULT 0,
@@ -53,16 +54,16 @@ class Database:
                         bj_wins INT DEFAULT 0,
                         quiz_correct INT DEFAULT 0
                     )
-                ''')
-                
+                """)
+
                 # Таблица для глобальных настроек бота
-                await cur.execute('''
+                await cur.execute("""
                     CREATE TABLE IF NOT EXISTS global_settings (
                         `key` VARCHAR(50) PRIMARY KEY,
                         `value` VARCHAR(255)
                     )
-                ''')
-                
+                """)
+
                 # Миграции
                 columns_to_add = [
                     ("msg_count", "INT DEFAULT 0"),
@@ -86,25 +87,27 @@ class Database:
                     ("quest_date", "DATE DEFAULT NULL"),
                     ("quests_completed", "INT DEFAULT 0"),
                     ("bj_wins", "INT DEFAULT 0"),
-                    ("quiz_correct", "INT DEFAULT 0")
+                    ("quiz_correct", "INT DEFAULT 0"),
                 ]
-                
+
                 for col_name, col_type in columns_to_add:
                     try:
-                        await cur.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}")
+                        await cur.execute(
+                            f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"
+                        )
                     except Exception:
-                        pass 
-                
+                        pass
+
                 # Таблица кастомного профиля
-                await cur.execute('''
+                await cur.execute("""
                     CREATE TABLE IF NOT EXISTS profile_settings (
                         user_id VARCHAR(25) PRIMARY KEY,
                         bg_color VARCHAR(15) DEFAULT '#2b2d31'
                     )
-                ''')
+                """)
 
                 # Таблица достижений
-                await cur.execute('''
+                await cur.execute("""
                     CREATE TABLE IF NOT EXISTS user_achievements (
                         user_id VARCHAR(25),
                         achievement_id VARCHAR(50),
@@ -112,25 +115,32 @@ class Database:
                         PRIMARY KEY(user_id, achievement_id),
                         FOREIGN KEY(user_id) REFERENCES users(user_id)
                     )
-                ''')
-                
+                """)
+
                 # Миграция из временной таблицы achievements в user_achievements
                 try:
-                    await cur.execute("INSERT IGNORE INTO user_achievements (user_id, achievement_id, date_earned) SELECT user_id, achievement_id, timestamp FROM achievements")
+                    await cur.execute(
+                        "INSERT IGNORE INTO user_achievements (user_id, achievement_id, date_earned) SELECT user_id, achievement_id, timestamp FROM achievements"
+                    )
                 except:
                     pass
 
     async def get_setting(self, key: str, default=None):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT `value` FROM global_settings WHERE `key` = %s", (key,))
+                await cur.execute(
+                    "SELECT `value` FROM global_settings WHERE `key` = %s", (key,)
+                )
                 res = await cur.fetchone()
-                return res['value'] if res else default
+                return res["value"] if res else default
 
     async def set_setting(self, key: str, value: str):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("REPLACE INTO global_settings (`key`, `value`) VALUES (%s, %s)", (key, value))
+                await cur.execute(
+                    "REPLACE INTO global_settings (`key`, `value`) VALUES (%s, %s)",
+                    (key, value),
+                )
 
     async def get_user(self, user_id: str):
         async with self.pool.acquire() as conn:
@@ -138,19 +148,26 @@ class Database:
                 await cur.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
                 res = await cur.fetchone()
                 if not res:
-                    await cur.execute("INSERT INTO users (user_id) VALUES (%s)", (user_id,))
-                    await cur.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
+                    await cur.execute(
+                        "INSERT INTO users (user_id) VALUES (%s)", (user_id,)
+                    )
+                    await cur.execute(
+                        "SELECT * FROM users WHERE user_id = %s", (user_id,)
+                    )
                     res = await cur.fetchone()
                 return res
 
     async def update_user(self, user_id: str, **kwargs):
-        if not kwargs: return
+        if not kwargs:
+            return
         fields = ", ".join([f"{k} = %s" for k in kwargs.keys()])
         values = list(kwargs.values())
         values.append(user_id)
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(f"UPDATE users SET {fields} WHERE user_id = %s", tuple(values))
+                await cur.execute(
+                    f"UPDATE users SET {fields} WHERE user_id = %s", tuple(values)
+                )
 
     async def add_achievement(self, user_id: str, ach_id: str):
         async with self.pool.acquire() as conn:
@@ -158,10 +175,16 @@ class Database:
                 try:
                     # Попытаемся скопировать старые ачивки, если они были сохранены в ошибочную таблицу
                     try:
-                        await cur.execute("INSERT IGNORE INTO user_achievements (user_id, achievement_id, date_earned) SELECT user_id, achievement_id, timestamp FROM achievements")
-                    except: pass
-                    
-                    await cur.execute("INSERT INTO user_achievements (user_id, achievement_id) VALUES (%s, %s)", (user_id, ach_id))
+                        await cur.execute(
+                            "INSERT IGNORE INTO user_achievements (user_id, achievement_id, date_earned) SELECT user_id, achievement_id, timestamp FROM achievements"
+                        )
+                    except:
+                        pass
+
+                    await cur.execute(
+                        "INSERT INTO user_achievements (user_id, achievement_id) VALUES (%s, %s)",
+                        (user_id, ach_id),
+                    )
                     return True
                 except:
                     return False
@@ -169,20 +192,26 @@ class Database:
     async def get_achievements(self, user_id: str):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("SELECT achievement_id FROM user_achievements WHERE user_id = %s", (user_id,))
+                await cur.execute(
+                    "SELECT achievement_id FROM user_achievements WHERE user_id = %s",
+                    (user_id,),
+                )
                 res = await cur.fetchall()
-                return [row['achievement_id'] for row in res]
+                return [row["achievement_id"] for row in res]
 
     async def get_user_rank(self, user_id: str):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("SELECT xp FROM users WHERE user_id = %s", (user_id,))
                 res = await cur.fetchone()
-                if not res: return 0
-                user_xp = res['xp']
-                await cur.execute("SELECT COUNT(*) as `rank` FROM users WHERE xp > %s", (user_xp,))
+                if not res:
+                    return 0
+                user_xp = res["xp"]
+                await cur.execute(
+                    "SELECT COUNT(*) as `rank` FROM users WHERE xp > %s", (user_xp,)
+                )
                 rank_res = await cur.fetchone()
-                return rank_res['rank'] + 1
+                return rank_res["rank"] + 1
 
     async def get_leaderboard(self, category: str, limit: int = 10):
         order_by = "xp DESC"
@@ -192,24 +221,36 @@ class Database:
             order_by = "voice_time_seconds DESC"
         elif category == "streak":
             order_by = "streak DESC"
-            
+
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(f"SELECT user_id, level, xp, vibecoins, streak, voice_time_seconds FROM users ORDER BY {order_by} LIMIT %s", (limit,))
+                await cur.execute(
+                    f"SELECT user_id, level, xp, vibecoins, streak, voice_time_seconds FROM users ORDER BY {order_by} LIMIT %s",
+                    (limit,),
+                )
                 return await cur.fetchall()
 
     async def get_expired_boosts(self):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 from datetime import datetime
-                await cur.execute("SELECT * FROM users WHERE xp_boost_until IS NOT NULL AND xp_boost_until < %s", (datetime.utcnow(),))
+
+                await cur.execute(
+                    "SELECT * FROM users WHERE xp_boost_until IS NOT NULL AND xp_boost_until < %s",
+                    (datetime.utcnow(),),
+                )
                 return await cur.fetchall()
 
     async def get_active_voice_memes(self):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 from datetime import datetime
-                await cur.execute("SELECT user_id, voice_memes_count, voice_memes_until FROM users WHERE voice_memes_until IS NOT NULL AND voice_memes_until > %s", (datetime.utcnow(),))
+
+                await cur.execute(
+                    "SELECT user_id, voice_memes_count, voice_memes_until FROM users WHERE voice_memes_until IS NOT NULL AND voice_memes_until > %s",
+                    (datetime.utcnow(),),
+                )
                 return await cur.fetchall()
+
 
 db = Database()

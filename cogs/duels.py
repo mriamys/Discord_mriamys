@@ -7,6 +7,7 @@ import asyncio
 import random
 import logging
 
+
 def get_duel_embed():
     return discord.Embed(
         title="⚔️ Дуэльный Клуб",
@@ -16,51 +17,75 @@ def get_duel_embed():
             "Победитель забирает всё!\n\n"
             "💡 *Если не видишь друга в списке — просто начни писать его ник в меню выбора.*"
         ),
-        color=discord.Color.dark_red()
+        color=discord.Color.dark_red(),
     )
 
+
 class DuelAcceptView(View):
-    def __init__(self, challenger: discord.Member, target: discord.Member, bet: int, thread: discord.Thread):
-        super().__init__(timeout=300) # 5 минут на принятие
+    def __init__(
+        self,
+        challenger: discord.Member,
+        target: discord.Member,
+        bet: int,
+        thread: discord.Thread,
+    ):
+        super().__init__(timeout=300)  # 5 минут на принятие
         self.challenger = challenger
         self.target = target
         self.bet = bet
         self.thread = thread
         self.accepted = False
 
-    @discord.ui.button(label="Принять Вызов", style=discord.ButtonStyle.success, emoji="⚔️")
+    @discord.ui.button(
+        label="Принять Вызов", style=discord.ButtonStyle.success, emoji="⚔️"
+    )
     async def btn_accept(self, interaction: discord.Interaction, button: Button):
         if interaction.user.id != self.target.id:
-            await interaction.response.send_message("❌ Этот вызов не для тебя!", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Этот вызов не для тебя!", ephemeral=True
+            )
             return
-        
-        if self.accepted: return
+
+        if self.accepted:
+            return
         self.accepted = True
 
         user_data = await db.get_user(str(self.target.id))
-        balance = user_data.get('vibecoins', 0)
+        balance = user_data.get("vibecoins", 0)
         c_data = await db.get_user(str(self.challenger.id))
-        c_balance = c_data.get('vibecoins', 0)
+        c_balance = c_data.get("vibecoins", 0)
 
         # Перепроверка балансов (вдруг потратили)
         if balance < self.bet:
-            await interaction.response.send_message(f"❌ Не хватает **VibeКоинов** для ставки! У тебя {balance}/{self.bet} 🪙", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ Не хватает **VibeКоинов** для ставки! У тебя {balance}/{self.bet} 🪙",
+                ephemeral=True,
+            )
             return
         if c_balance < self.bet:
-            await interaction.response.send_message(f"❌ У {self.challenger.display_name} уже нет денег на эту ставку!", ephemeral=True)
+            await interaction.response.send_message(
+                f"❌ У {self.challenger.display_name} уже нет денег на эту ставку!",
+                ephemeral=True,
+            )
             return
 
         # Снимаем ставки
         await db.update_user(str(self.target.id), vibecoins=balance - self.bet)
         await db.update_user(str(self.challenger.id), vibecoins=c_balance - self.bet)
-        
+
         # Отключаем кнопки
         for child in self.children:
             child.disabled = True
-        await interaction.response.edit_message(content=f"⚔️ **Дуэль принята!** Битва начинается...", view=self)
+        await interaction.response.edit_message(
+            content=f"⚔️ **Дуэль принята!** Битва начинается...", view=self
+        )
 
-        embed = discord.Embed(title="⚔️ ДУЭЛЬ", description="⏳ Считаем...", color=discord.Color.orange())
-        msg = await self.thread.send(content=f"{self.challenger.mention} 🆚 {self.target.mention}", embed=embed)
+        embed = discord.Embed(
+            title="⚔️ ДУЭЛЬ", description="⏳ Считаем...", color=discord.Color.orange()
+        )
+        msg = await self.thread.send(
+            content=f"{self.challenger.mention} 🆚 {self.target.mention}", embed=embed
+        )
 
         # Анимация битвы (перебор цифр)
         for _ in range(3):
@@ -73,10 +98,10 @@ class DuelAcceptView(View):
                 pass
 
         await asyncio.sleep(0.4)
-        
+
         c_final = random.randint(1, 100)
         t_final = random.randint(1, 100)
-        while c_final == t_final: # Чтобы не было ничьей
+        while c_final == t_final:  # Чтобы не было ничьей
             t_final = random.randint(1, 100)
 
         winner = self.challenger if c_final > t_final else self.target
@@ -94,54 +119,82 @@ class DuelAcceptView(View):
         await msg.edit(embed=embed)
 
         win_data = await db.get_user(str(winner.id))
-        duels_won = win_data.get('duels_won', 0) + 1
-        await db.update_user(str(winner.id), vibecoins=win_data.get('vibecoins', 0) + bank, duels_won=duels_won)
-        
+        duels_won = win_data.get("duels_won", 0) + 1
+        await db.update_user(
+            str(winner.id),
+            vibecoins=win_data.get("vibecoins", 0) + bank,
+            duels_won=duels_won,
+        )
+
         # Исправлено: используем interaction.client вместо self.target.client
         interaction.client.dispatch("duel_won", winner, duels_won)
 
         # Ресенд меню дуэлей в конце дуэли
         try:
             embed_menu = get_duel_embed()
-            await self.thread.send(content=self.challenger.mention, embed=embed_menu, view=DuelRoomView(self.challenger.id))
+            await self.thread.send(
+                content=self.challenger.mention,
+                embed=embed_menu,
+                view=DuelRoomView(self.challenger.id),
+            )
         except Exception as e:
             logging.error(f"Error resending duel menu: {e}")
 
-    @discord.ui.button(label="Отклонить", style=discord.ButtonStyle.secondary, emoji="✖️")
+    @discord.ui.button(
+        label="Отклонить", style=discord.ButtonStyle.secondary, emoji="✖️"
+    )
     async def btn_decline(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id != self.target.id and interaction.user.id != self.challenger.id:
+        if (
+            interaction.user.id != self.target.id
+            and interaction.user.id != self.challenger.id
+        ):
             await interaction.response.send_message("❌ Не твоя дуэль!", ephemeral=True)
             return
 
         for child in self.children:
             child.disabled = True
-        
+
         if interaction.user.id == self.target.id:
-            await interaction.response.edit_message(content=f"Отменено: {self.target.display_name} испугался.", view=self)
+            await interaction.response.edit_message(
+                content=f"Отменено: {self.target.display_name} испугался.", view=self
+            )
         else:
-            await interaction.response.edit_message(content=f"Отменено: {self.challenger.display_name} передумал.", view=self)
+            await interaction.response.edit_message(
+                content=f"Отменено: {self.challenger.display_name} передумал.",
+                view=self,
+            )
 
         # Ресенд меню дуэлей при отклонении
         try:
             embed_menu = get_duel_embed()
-            await interaction.channel.send(content=self.challenger.mention, embed=embed_menu, view=DuelRoomView(self.challenger.id))
+            await interaction.channel.send(
+                content=self.challenger.mention,
+                embed=embed_menu,
+                view=DuelRoomView(self.challenger.id),
+            )
         except:
             pass
 
 
 class DuelBetModal(Modal):
-    def __init__(self, challenger: discord.Member, target: discord.Member, c_balance: int, t_balance: int):
+    def __init__(
+        self,
+        challenger: discord.Member,
+        target: discord.Member,
+        c_balance: int,
+        t_balance: int,
+    ):
         # Показываем баланс обоих игроков в заголовке
         super().__init__(title=f"Твой: {c_balance:,} | Его: {t_balance:,}")
         self.challenger = challenger
         self.target = target
         self.c_balance = c_balance
         self.t_balance = t_balance
-        
+
         self.bet_input = TextInput(
-            label=f"Сумма ставки (макс. {min(c_balance, t_balance):,})", 
-            placeholder=f"Напиши число...", 
-            max_length=10
+            label=f"Сумма ставки (макс. {min(c_balance, t_balance):,})",
+            placeholder=f"Напиши число...",
+            max_length=10,
         )
         self.add_item(self.bet_input)
 
@@ -151,22 +204,30 @@ class DuelBetModal(Modal):
             if bet <= 0:
                 raise ValueError
         except ValueError:
-            await interaction.response.send_message("❌ Введи нормальное число больше 0.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Введи нормальное число больше 0.", ephemeral=True
+            )
             return
 
         c_data = await db.get_user(str(self.challenger.id))
-        if c_data.get('vibecoins', 0) < bet:
-            await interaction.response.send_message(f"❌ У тебя нет **{bet} 🪙**! На балансе: {c_data.get('vibecoins', 0)}", ephemeral=True)
+        if c_data.get("vibecoins", 0) < bet:
+            await interaction.response.send_message(
+                f"❌ У тебя нет **{bet} 🪙**! На балансе: {c_data.get('vibecoins', 0)}",
+                ephemeral=True,
+            )
             return
-            
+
         t_data = await db.get_user(str(self.target.id))
-        if t_data.get('vibecoins', 0) < bet:
-            await interaction.response.send_message(f"❌ У {self.target.display_name} нет **{bet} 🪙**! На балансе: {t_data.get('vibecoins', 0)}", ephemeral=True)
+        if t_data.get("vibecoins", 0) < bet:
+            await interaction.response.send_message(
+                f"❌ У {self.target.display_name} нет **{bet} 🪙**! На балансе: {t_data.get('vibecoins', 0)}",
+                ephemeral=True,
+            )
             return
 
         await interaction.response.send_message(
             f"⚔️ {self.target.mention}, тебя вызывает на дуэль {self.challenger.mention}!\nСтавка: **{bet:,} 🪙**. Победитель забирает всё!",
-            view=DuelAcceptView(self.challenger, self.target, bet, interaction.channel)
+            view=DuelAcceptView(self.challenger, self.target, bet, interaction.channel),
         )
 
         # Удаляем старое меню
@@ -176,26 +237,39 @@ class DuelBetModal(Modal):
             except:
                 pass
 
+
 class DuelRoomView(View):
     def __init__(self, author_id=None):
         super().__init__(timeout=None)
         self.author_id = author_id
 
-    @discord.ui.select(cls=UserSelect, placeholder="Кого вызываешь на дуэль?", min_values=1, max_values=1, custom_id="duel_user_select")
+    @discord.ui.select(
+        cls=UserSelect,
+        placeholder="Кого вызываешь на дуэль?",
+        min_values=1,
+        max_values=1,
+        custom_id="duel_user_select",
+    )
     async def select_target(self, interaction: discord.Interaction, select: UserSelect):
         aid = int(self.author_id) if self.author_id else interaction.user.id
 
         if interaction.user.id != aid:
-            await interaction.response.send_message("❌ Только инициатор комнаты может выбирать соперника.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Только инициатор комнаты может выбирать соперника.", ephemeral=True
+            )
             return
 
         target = interaction.guild.get_member(select.values[0].id)
         if not target or target.bot:
-            await interaction.response.send_message("❌ Нельзя выбрать бота или неизвестного пользователя.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Нельзя выбрать бота или неизвестного пользователя.", ephemeral=True
+            )
             return
 
         if target.id == interaction.user.id:
-            await interaction.response.send_message("❌ С собой играть скучно. Выбери кого-то другого.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ С собой играть скучно. Выбери кого-то другого.", ephemeral=True
+            )
             return
 
         # Добавляем цель в приватную ветку
@@ -206,18 +280,31 @@ class DuelRoomView(View):
 
         user_data = await db.get_user(str(interaction.user.id))
         target_data = await db.get_user(str(target.id))
-        
-        balance = user_data.get('vibecoins', 0)
-        t_balance = target_data.get('vibecoins', 0)
-        
-        await interaction.response.send_modal(DuelBetModal(interaction.user, target, balance, t_balance))
 
-    @discord.ui.button(label="Выйти и удалить комнату", style=discord.ButtonStyle.danger, emoji="🚪", row=1, custom_id="duel_room_exit")
+        balance = user_data.get("vibecoins", 0)
+        t_balance = target_data.get("vibecoins", 0)
+
+        await interaction.response.send_modal(
+            DuelBetModal(interaction.user, target, balance, t_balance)
+        )
+
+    @discord.ui.button(
+        label="Выйти и удалить комнату",
+        style=discord.ButtonStyle.danger,
+        emoji="🚪",
+        row=1,
+        custom_id="duel_room_exit",
+    )
     async def btn_close(self, interaction: discord.Interaction, button: Button):
         aid = int(self.author_id) if self.author_id else interaction.user.id
 
-        if interaction.user.id != aid and not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Только владелец комнаты или админ может её закрыть.", ephemeral=True)
+        if (
+            interaction.user.id != aid
+            and not interaction.user.guild_permissions.administrator
+        ):
+            await interaction.response.send_message(
+                "❌ Только владелец комнаты или админ может её закрыть.", ephemeral=True
+            )
             return
 
         await interaction.response.send_message("🚪 Закрываю комнату...")
@@ -226,6 +313,7 @@ class DuelRoomView(View):
             await interaction.channel.delete()
         except:
             pass
+
 
 class Duels(commands.Cog):
     def __init__(self, bot):
@@ -236,40 +324,52 @@ class Duels(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         channel = interaction.channel
         thread_name = f"⚔️┃дуэль-{interaction.user.name[:15]}"
-        
+
         try:
             thread = await channel.create_thread(
                 name=thread_name,
                 type=discord.ChannelType.private_thread,
-                auto_archive_duration=60
+                auto_archive_duration=60,
             )
             await thread.add_user(interaction.user)
         except discord.Forbidden:
-            await interaction.followup.send("❌ У бота нет прав на создание приватных веток.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ У бота нет прав на создание приватных веток.", ephemeral=True
+            )
             return
         except Exception as e:
             await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
             return
 
-        await interaction.followup.send(f"✅ Комната создана в ветке: {thread.mention}", ephemeral=True)
-        
+        await interaction.followup.send(
+            f"✅ Комната создана в ветке: {thread.mention}", ephemeral=True
+        )
+
         embed = get_duel_embed()
-        await thread.send(content=interaction.user.mention, embed=embed, view=DuelRoomView(interaction.user.id))
+        await thread.send(
+            content=interaction.user.mention,
+            embed=embed,
+            view=DuelRoomView(interaction.user.id),
+        )
 
         async def _delete_thread():
             while True:
-                await asyncio.sleep(300) # Проверка каждые 5 минут
+                await asyncio.sleep(300)  # Проверка каждые 5 минут
                 try:
                     found_recent = False
                     async for message in thread.history(limit=1):
-                        if (discord.utils.utcnow() - message.created_at).total_seconds() < 300:
+                        if (
+                            discord.utils.utcnow() - message.created_at
+                        ).total_seconds() < 300:
                             found_recent = True
                     if not found_recent:
                         await thread.delete()
                         return
                 except Exception:
                     return
+
         self.bot.loop.create_task(_delete_thread())
+
 
 async def setup(bot):
     await bot.add_cog(Duels(bot))

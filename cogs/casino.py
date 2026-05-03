@@ -11,53 +11,73 @@ MIN_BET = 10
 MAX_BET = 1_000_000
 
 # ─── Слоты: символы + веса + множители ──────────────────────────────────────
-SYMBOLS      = ["🍒", "🍋", "🍊", "🍇", "🔔", "⭐", "💎", "7️⃣"]
-WEIGHTS      = [ 35,   30,   20,   12,    8,    5,    3,    1]
+SYMBOLS = ["🍒", "🍋", "🍊", "🍇", "🔔", "⭐", "💎", "7️⃣"]
+WEIGHTS = [35, 30, 20, 12, 8, 5, 3, 1]
+
 
 def spin_slots():
     return random.choices(SYMBOLS, weights=WEIGHTS, k=3)
+
 
 def calc_slots(bet: int, reels: list) -> tuple[int, str, str]:
     """(payout, result_line, footer)"""
     a, b, c = reels
     line = f"**[  {a}  |  {b}  |  {c}  ]**"
-    
+
     if a == b == c:
-        mults = {"7️⃣": 50.0, "💎": 25.0, "⭐": 15.0, "🔔": 10.0,
-                 "🍇": 5.0,  "🍊": 4.0, "🍋": 3.0, "🍒": 2.5}
+        mults = {
+            "7️⃣": 50.0,
+            "💎": 25.0,
+            "⭐": 15.0,
+            "🔔": 10.0,
+            "🍇": 5.0,
+            "🍊": 4.0,
+            "🍋": 3.0,
+            "🍒": 2.5,
+        }
         mult = mults.get(a, 2.5)
         payout = int(bet * mult)
-        msg = f"🎰 **ДЖЕКПОТ!!!** x{mult:.0f}" if mult >= 15 else f"✨ **Три в ряд!** x{mult:.1f}"
+        msg = (
+            f"🎰 **ДЖЕКПОТ!!!** x{mult:.0f}"
+            if mult >= 15
+            else f"✨ **Три в ряд!** x{mult:.1f}"
+        )
         return payout, line, f"{msg} — выигрыш **{payout:,} 🪙**!"
-    
+
     elif a == b:
         payout = bet * 2
         return payout, line, f"🎯 Два совпадения слева — x2 — выигрыш **{payout:,} 🪙**"
-    
+
     elif a == "🍒":
         payout = bet
-        return payout, line, f"🍒 Первая вишенка спасает! Возврат ставки: **{payout:,} 🪙**"
-        
+        return (
+            payout,
+            line,
+            f"🍒 Первая вишенка спасает! Возврат ставки: **{payout:,} 🪙**",
+        )
+
     return 0, line, "❌ Мимо! Попробуй ещё раз."
 
 
 def flip_coin(bet: int, choice: str) -> tuple[int, str]:
     result = random.choice(["Орёл", "Решка"])
-    icons  = {"Орёл": "🦅", "Решка": "💿"}
-    won    = result.lower() == choice.lower()
+    icons = {"Орёл": "🦅", "Решка": "💿"}
+    won = result.lower() == choice.lower()
     payout = int(bet * 1.95) if won else 0
-    icon   = icons[result]
-    msg    = f"{icon} Выпало **{result}**! {'🥳 Победа! **x1.95** +**' + str(payout) + ' 🪙**' if won else '💔 Проигрыш.'}"
+    icon = icons[result]
+    msg = f"{icon} Выпало **{result}**! {'🥳 Победа! **x1.95** +**' + str(payout) + ' 🪙**' if won else '💔 Проигрыш.'}"
     return payout, msg
 
+
 def roll_dice(bet: int, guess: int) -> tuple[int, str]:
-    result      = random.randint(1, 6)
-    dice_emojis = ["⚀","⚁","⚂","⚃","⚄","⚅"]
-    won         = result == guess
-    payout      = int(bet * 5.5) if won else 0
-    icon        = dice_emojis[result - 1]
+    result = random.randint(1, 6)
+    dice_emojis = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
+    won = result == guess
+    payout = int(bet * 5.5) if won else 0
+    icon = dice_emojis[result - 1]
     msg = f"{icon} Выпало **{result}**! {'🎉 Угадал! **x5.5** — +**' + str(payout) + ' 🪙**!' if won else f'💔 Промах. Ты ставил на {guess}.'}"
     return payout, msg
+
 
 # ─── Валидация ────────────────────────────────────────────────────────────────
 def get_casino_embed(user_name=None):
@@ -76,9 +96,11 @@ def get_casino_embed(user_name=None):
     return embed
 
 
-async def validate(interaction: discord.Interaction, bet_str: str) -> tuple[int | None, dict | None]:
+async def validate(
+    interaction: discord.Interaction, bet_str: str
+) -> tuple[int | None, dict | None]:
     user_id = str(interaction.user.id)
-    
+
     try:
         bet = int(bet_str.strip().replace(",", "").replace(" ", ""))
     except ValueError:
@@ -86,48 +108,63 @@ async def validate(interaction: discord.Interaction, bet_str: str) -> tuple[int 
         return None, None
 
     if bet < MIN_BET:
-        await interaction.response.send_message(f"❌ Минимальная ставка: **{MIN_BET} 🪙**", ephemeral=True)
+        await interaction.response.send_message(
+            f"❌ Минимальная ставка: **{MIN_BET} 🪙**", ephemeral=True
+        )
         return None, None
     if bet > MAX_BET:
-        await interaction.response.send_message(f"❌ Максимальная ставка: **{MAX_BET:,} 🪙**", ephemeral=True)
+        await interaction.response.send_message(
+            f"❌ Максимальная ставка: **{MAX_BET:,} 🪙**", ephemeral=True
+        )
         return None, None
 
     user_data = await db.get_user(user_id)
-    balance   = user_data.get("vibecoins", 0)
+    balance = user_data.get("vibecoins", 0)
     if balance < bet:
         await interaction.response.send_message(
-            f"❌ Не хватает **VibeКоинов**! У тебя **{balance:,} 🪙**, ставка **{bet:,} 🪙**.", ephemeral=True
+            f"❌ Не хватает **VibeКоинов**! У тебя **{balance:,} 🪙**, ставка **{bet:,} 🪙**.",
+            ephemeral=True,
         )
         return None, None
 
     return bet, user_data
 
-async def apply_result(bot, user_id: str, user_data: dict, bet: int, payout: int, member: discord.Member):
+
+async def apply_result(
+    bot, user_id: str, user_data: dict, bet: int, payout: int, member: discord.Member
+):
     """Списывает ставку, зачисляет выигрыш, обновляет БД и статистику."""
     try:
         new_spent = user_data.get("casino_spent", 0) + bet
         new_wins = user_data.get("casino_wins", 0) + payout
         balance = user_data.get("vibecoins", 0) - bet + payout
-        
-        await db.update_user(user_id, 
-                             vibecoins=max(balance, 0),
-                             casino_spent=new_spent,
-                             casino_wins=new_wins)
-                             
+
+        await db.update_user(
+            user_id,
+            vibecoins=max(balance, 0),
+            casino_spent=new_spent,
+            casino_wins=new_wins,
+        )
+
         # Вызываем событие для ачивок
         bot.dispatch("casino_played", member, new_spent, new_wins, payout, bet)
-        
+
         return max(balance, 0)
     except Exception as e:
         print(f"[DB ERROR] apply_result: {e}")
         raise e
 
+
 def result_color(payout: int, bet: int) -> int:
-    if payout > bet:  return 0x2ECC71   # green
-    if payout > 0:    return 0xF1C40F   # yellow
-    return 0xE74C3C                      # red
+    if payout > bet:
+        return 0x2ECC71  # green
+    if payout > 0:
+        return 0xF1C40F  # yellow
+    return 0xE74C3C  # red
+
 
 # ─── Модалки ─────────────────────────────────────────────────────────────────
+
 
 class SlotsModal(discord.ui.Modal):
     def __init__(self, balance: int):
@@ -135,7 +172,7 @@ class SlotsModal(discord.ui.Modal):
         self.bet_input = discord.ui.TextInput(
             label=f"Твой баланс: {balance:,} 🪙",
             placeholder=f"Введи сумму ({MIN_BET}–{MAX_BET:,})...",
-            max_length=10
+            max_length=10,
         )
         self.add_item(self.bet_input)
 
@@ -145,14 +182,22 @@ class SlotsModal(discord.ui.Modal):
             if bet is None:
                 return
 
-            embed = discord.Embed(title="🎰 Слоты", description="[ 🎰 ] КРУТИМ БАРАБАНЫ [ 🎰 ]", color=discord.Color.blue())
-            
-            is_casino_channel = interaction.message and "казино-" in interaction.channel.name
-            
+            embed = discord.Embed(
+                title="🎰 Слоты",
+                description="[ 🎰 ] КРУТИМ БАРАБАНЫ [ 🎰 ]",
+                color=discord.Color.blue(),
+            )
+
+            is_casino_channel = (
+                interaction.message and "казино-" in interaction.channel.name
+            )
+
             if is_casino_channel:
                 await interaction.response.send_message(embed=embed)
-                try: await interaction.message.delete()
-                except: pass
+                try:
+                    await interaction.message.delete()
+                except:
+                    pass
                 msg = await interaction.original_response()
             else:
                 await interaction.response.send_message(embed=embed)
@@ -162,35 +207,57 @@ class SlotsModal(discord.ui.Modal):
             for _ in range(3):
                 await asyncio.sleep(0.4)
                 t_reels = spin_slots()
-                embed.description = f"**[  {t_reels[0]}  |  {t_reels[1]}  |  {t_reels[2]}  ]**"
-                try: await msg.edit(embed=embed)
-                except: pass
+                embed.description = (
+                    f"**[  {t_reels[0]}  |  {t_reels[1]}  |  {t_reels[2]}  ]**"
+                )
+                try:
+                    await msg.edit(embed=embed)
+                except:
+                    pass
 
             await asyncio.sleep(0.3)
             # Реальный результат
-            reels         = spin_slots()
+            reels = spin_slots()
             payout, line, footer = calc_slots(bet, reels)
-            balance       = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
+            balance = await apply_result(
+                interaction.client,
+                str(interaction.user.id),
+                user_data,
+                bet,
+                payout,
+                interaction.user,
+            )
 
             embed.color = result_color(payout, bet)
             embed.description = f"{line}\n\n{footer}"
             embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
-            try: await msg.edit(embed=embed)
-            except: pass
+            try:
+                await msg.edit(embed=embed)
+            except:
+                pass
 
             # Ресенд меню стола в самом конце
             if is_casino_channel:
                 menu_embed = get_casino_embed(interaction.user.display_name)
-                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
+                await interaction.channel.send(
+                    content=interaction.user.mention,
+                    embed=menu_embed,
+                    view=CasinoView(),
+                )
 
         except Exception as e:
             print(f"[CASINO ERROR] SlotsModal: {e}")
             try:
                 if not interaction.response.is_done():
-                    await interaction.response.send_message(f"❌ Произошла ошибка: {e}", ephemeral=True)
+                    await interaction.response.send_message(
+                        f"❌ Произошла ошибка: {e}", ephemeral=True
+                    )
                 else:
-                    await interaction.followup.send(f"❌ Произошла ошибка: {e}", ephemeral=True)
-            except: pass
+                    await interaction.followup.send(
+                        f"❌ Произошла ошибка: {e}", ephemeral=True
+                    )
+            except:
+                pass
 
 
 class CoinModal(Modal):
@@ -200,7 +267,7 @@ class CoinModal(Modal):
         self.bet_input = TextInput(
             label=f"Твой баланс: {balance:,} 🪙",
             placeholder=f"Введи сумму для ставки на {choice}...",
-            max_length=10
+            max_length=10,
         )
         self.add_item(self.bet_input)
 
@@ -210,14 +277,22 @@ class CoinModal(Modal):
             if bet is None:
                 return
 
-            embed = discord.Embed(title="🪙 Монетка", description="⏳ Монетка летит...", color=discord.Color.blue())
-            
-            is_casino_channel = interaction.message and "казино-" in interaction.channel.name
-            
+            embed = discord.Embed(
+                title="🪙 Монетка",
+                description="⏳ Монетка летит...",
+                color=discord.Color.blue(),
+            )
+
+            is_casino_channel = (
+                interaction.message and "казино-" in interaction.channel.name
+            )
+
             if is_casino_channel:
                 await interaction.response.send_message(embed=embed)
-                try: await interaction.message.delete()
-                except: pass
+                try:
+                    await interaction.message.delete()
+                except:
+                    pass
                 msg = await interaction.original_response()
             else:
                 await interaction.response.send_message(embed=embed)
@@ -227,34 +302,52 @@ class CoinModal(Modal):
             for _ in range(3):
                 await asyncio.sleep(0.3)
                 embed.description = f"**[ {random.choice(icons)} ]**"
-                try: await msg.edit(embed=embed)
-                except: pass
+                try:
+                    await msg.edit(embed=embed)
+                except:
+                    pass
 
             await asyncio.sleep(0.2)
 
             payout, msg_text = flip_coin(bet, self.choice)
-            balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
+            balance = await apply_result(
+                interaction.client,
+                str(interaction.user.id),
+                user_data,
+                bet,
+                payout,
+                interaction.user,
+            )
 
             embed.color = result_color(payout, bet)
             embed.description = msg_text
             embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
-            
-            try: await msg.edit(embed=embed)
-            except: pass
+
+            try:
+                await msg.edit(embed=embed)
+            except:
+                pass
 
             # Ресенд меню стола
             if is_casino_channel:
                 menu_embed = get_casino_embed(interaction.user.display_name)
-                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
+                await interaction.channel.send(
+                    content=interaction.user.mention,
+                    embed=menu_embed,
+                    view=CasinoView(),
+                )
 
         except Exception as e:
             print(f"[CASINO ERROR] CoinModal: {e}")
             try:
                 if not interaction.response.is_done():
-                    await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+                    await interaction.response.send_message(
+                        f"❌ Ошибка: {e}", ephemeral=True
+                    )
                 else:
                     await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
-            except: pass
+            except:
+                pass
 
 
 class DiceModal(Modal):
@@ -264,7 +357,7 @@ class DiceModal(Modal):
         self.bet_input = TextInput(
             label=f"Твой баланс: {balance:,} 🪙",
             placeholder=f"Введи ставку на выпадение {guess}...",
-            max_length=10
+            max_length=10,
         )
         self.add_item(self.bet_input)
 
@@ -274,54 +367,81 @@ class DiceModal(Modal):
             if bet is None:
                 return
 
-            embed = discord.Embed(title=f"🎲 Кости (ставка на {self.guess})", description="⏳ Кости трясутся...", color=discord.Color.blue())
+            embed = discord.Embed(
+                title=f"🎲 Кости (ставка на {self.guess})",
+                description="⏳ Кости трясутся...",
+                color=discord.Color.blue(),
+            )
 
-            is_casino_channel = interaction.message and "казино-" in interaction.channel.name
+            is_casino_channel = (
+                interaction.message and "казино-" in interaction.channel.name
+            )
 
             if is_casino_channel:
                 await interaction.response.send_message(embed=embed)
-                try: await interaction.message.delete()
-                except: pass
+                try:
+                    await interaction.message.delete()
+                except:
+                    pass
                 msg = await interaction.original_response()
             else:
                 await interaction.response.send_message(embed=embed)
                 msg = await interaction.original_response()
 
-            dice_emojis = ["⚀","⚁","⚂","⚃","⚄","⚅"]
+            dice_emojis = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
             for _ in range(3):
                 await asyncio.sleep(0.3)
                 embed.description = f"**[ {random.choice(dice_emojis)} ]**"
-                try: await msg.edit(embed=embed)
-                except: pass
-            
+                try:
+                    await msg.edit(embed=embed)
+                except:
+                    pass
+
             await asyncio.sleep(0.2)
 
             payout, msg_text = roll_dice(bet, self.guess)
-            balance     = await apply_result(interaction.client, str(interaction.user.id), user_data, bet, payout, interaction.user)
+            balance = await apply_result(
+                interaction.client,
+                str(interaction.user.id),
+                user_data,
+                bet,
+                payout,
+                interaction.user,
+            )
 
             embed.color = result_color(payout, bet)
             embed.description = msg_text
             embed.set_footer(text=f"Ставка: {bet:,} 🪙  •  Баланс: {balance:,} 🪙")
 
-            try: await msg.edit(embed=embed)
-            except: pass
+            try:
+                await msg.edit(embed=embed)
+            except:
+                pass
 
             # Ресенд меню стола
             if is_casino_channel:
                 menu_embed = get_casino_embed(interaction.user.display_name)
-                await interaction.channel.send(content=interaction.user.mention, embed=menu_embed, view=CasinoView())
+                await interaction.channel.send(
+                    content=interaction.user.mention,
+                    embed=menu_embed,
+                    view=CasinoView(),
+                )
 
         except Exception as e:
             print(f"[CASINO ERROR] DiceModal: {e}")
             try:
                 if not interaction.response.is_done():
-                    await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+                    await interaction.response.send_message(
+                        f"❌ Ошибка: {e}", ephemeral=True
+                    )
                 else:
                     await interaction.followup.send(f"❌ Ошибка: {e}", ephemeral=True)
-            except: pass
+            except:
+                pass
 
 
 # ─── Главное меню казино ─────────────────────────────────────────────────────
+
 
 class DiceSelect(discord.ui.Select):
     def __init__(self):
@@ -333,49 +453,84 @@ class DiceSelect(discord.ui.Select):
             discord.SelectOption(label="Выбрать 5", emoji="5️⃣", value="5"),
             discord.SelectOption(label="Выбрать 6", emoji="6️⃣", value="6"),
         ]
-        super().__init__(placeholder="🎲 Какое число выпадет? (x5.5)", options=options, custom_id="casino_dice_select")
-        
+        super().__init__(
+            placeholder="🎲 Какое число выпадет? (x5.5)",
+            options=options,
+            custom_id="casino_dice_select",
+        )
+
     async def callback(self, interaction: discord.Interaction):
         guess = int(self.values[0])
         user_data = await db.get_user(str(interaction.user.id))
         balance = user_data.get("vibecoins", 0)
         await interaction.response.send_modal(DiceModal(guess, balance))
 
+
 class CasinoView(View):
     """Persistent menu shown when using setup_casino."""
+
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(DiceSelect())
 
-    @discord.ui.button(label="Слоты", emoji="🎰", style=discord.ButtonStyle.blurple, custom_id="casino_slots")
-    async def slots_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="Слоты",
+        emoji="🎰",
+        style=discord.ButtonStyle.blurple,
+        custom_id="casino_slots",
+    )
+    async def slots_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         user_data = await db.get_user(str(interaction.user.id))
         balance = user_data.get("vibecoins", 0)
         await interaction.response.send_modal(SlotsModal(balance))
 
-    @discord.ui.button(label="Орёл", emoji="🦅", style=discord.ButtonStyle.secondary, custom_id="casino_coin_heads")
-    async def coin_h_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="Орёл",
+        emoji="🦅",
+        style=discord.ButtonStyle.secondary,
+        custom_id="casino_coin_heads",
+    )
+    async def coin_h_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         user_data = await db.get_user(str(interaction.user.id))
         balance = user_data.get("vibecoins", 0)
         await interaction.response.send_modal(CoinModal("Орёл", balance))
 
-    @discord.ui.button(label="Решка", emoji="🪙", style=discord.ButtonStyle.secondary, custom_id="casino_coin_tails")
-    async def coin_t_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="Решка",
+        emoji="🪙",
+        style=discord.ButtonStyle.secondary,
+        custom_id="casino_coin_tails",
+    )
+    async def coin_t_btn(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
         user_data = await db.get_user(str(interaction.user.id))
         balance = user_data.get("vibecoins", 0)
         await interaction.response.send_modal(CoinModal("Решка", balance))
 
-    @discord.ui.button(label="❌ Выйти", style=discord.ButtonStyle.danger, custom_id="casino_leave")
+    @discord.ui.button(
+        label="❌ Выйти", style=discord.ButtonStyle.danger, custom_id="casino_leave"
+    )
     async def leave_btn(self, interaction: discord.Interaction, button: Button):
         if "казино-" in interaction.channel.name:
-            await interaction.response.send_message("💣 Стол закрыт! Убираем фишки...", ephemeral=True)
+            await interaction.response.send_message(
+                "💣 Стол закрыт! Убираем фишки...", ephemeral=True
+            )
             await asyncio.sleep(2)
             await interaction.channel.delete()
         else:
-            await interaction.response.send_message("❌ Эту кнопку можно нажимать только в личном канале казино.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Эту кнопку можно нажимать только в личном канале казино.",
+                ephemeral=True,
+            )
 
 
 # ─── Cog ─────────────────────────────────────────────────────────────────────
+
 
 class Casino(commands.Cog):
     def __init__(self, bot):
@@ -393,9 +548,8 @@ class Casino(commands.Cog):
     async def balance(self, ctx):
         """Показывает твой баланс VibeКоинов."""
         user_data = await db.get_user(str(ctx.author.id))
-        balance   = user_data.get("vibecoins", 0)
+        balance = user_data.get("vibecoins", 0)
         await ctx.send(f"🪙 Твой баланс: **{balance:,} VibeКоинов**", ephemeral=True)
-
 
 
 async def setup(bot):
