@@ -52,7 +52,8 @@ async def generate_profile_card(
         theme_lvl, LEVEL_THEMES[max(k for k in LEVEL_THEMES.keys() if k <= level)]
     )
 
-    panel_opacity = min(160 + (level // 5) * 4, 230)
+    # Уменьшаем непрозрачность, чтобы фон был лучше виден
+    panel_opacity = min(120 + (level // 5) * 2, 180)
 
     bg_filename = f"bg_lvl_{theme_lvl}.jpg"
     bg_path = os.path.join(BASE_DIR, "assets", "img", bg_filename)
@@ -68,7 +69,7 @@ async def generate_profile_card(
         if os.path.exists(bg_path):
             background = Editor(bg_path).resize((900, 350))
         else:
-            background = Editor(Canvas((900, 350), color="#1e1f22"))
+            background = Editor(Canvas((900, 350), color=bg_color))
     except:
         background = Editor(Canvas((900, 350), color="#2b2d31"))
 
@@ -100,7 +101,8 @@ async def generate_profile_card(
         s_color = status_colors.get(
             getattr(member, "status", discord.Status.offline), "#747F8D"
         )
-        background.ellipse((168, 168), width=50, height=50, color="#2b2d31")
+        # Подложка под статус в цвет панели
+        background.ellipse((168, 168), width=50, height=50, color=(0, 0, 0, panel_opacity))
         background.ellipse((173, 173), width=40, height=40, color=s_color)
     except:
         pass
@@ -120,8 +122,9 @@ async def generate_profile_card(
     )
 
     if rank_pos > 0:
+        # Номер участника делаем белым для лучшей читаемости
         background.text(
-            (840, 40), f"#{rank_pos}", font=font_title, color=theme_color, align="right"
+            (840, 40), f"#{rank_pos}", font=font_title, color="#ffffff", align="right"
         )
 
     if streak > 0:
@@ -223,9 +226,9 @@ async def generate_profile_card(
                 background.ellipse(
                     (x_pos - 4, 226), width=48, height=48, color=ring_color
                 )
-                # Вырез
+                # Вырез под цвет панели
                 background.ellipse(
-                    (x_pos - 1, 229), width=42, height=42, color="#2b2d31"
+                    (x_pos - 1, 229), width=42, height=42, color=(0, 0, 0, panel_opacity)
                 )
 
                 background.paste(icon, (x_pos, 230))
@@ -261,19 +264,45 @@ async def generate_profile_card(
 
 
 async def generate_welcome_card(member: discord.Member):
-    background = Editor(Canvas((800, 250), color="#2b2d31"))
+    bg_path = os.path.join(BASE_DIR, "assets", "img", "default_bg.jpg")
+    font_bold_path = os.path.join(BASE_DIR, "assets", "fonts", "Roboto-Bold.ttf")
+    font_reg_path = os.path.join(BASE_DIR, "assets", "fonts", "Roboto-Regular.ttf")
+
+    try:
+        if os.path.exists(bg_path):
+            background = Editor(bg_path).resize((800, 250))
+        else:
+            background = Editor(Canvas((800, 250), color="#2b2d31"))
+    except:
+        background = Editor(Canvas((800, 250), color="#2b2d31"))
+
+    # Стеклянная панель
+    background.rectangle(
+        (20, 20), width=760, height=210, color=(0, 0, 0, 160), radius=20
+    )
+
     try:
         avatar_image = await load_image_async(str(member.display_avatar.url))
-        avatar = Editor(avatar_image).resize((150, 160)).circle_image()
-        background.paste(avatar, (40, 45))
+        avatar = Editor(avatar_image).resize((150, 150)).circle_image()
+        background.paste(avatar, (45, 50))
     except:
         pass
 
-    font_title = Font(
-        path=os.path.join(BASE_DIR, "assets", "fonts", "Roboto-Bold.ttf"), size=40
-    )
-    background.text((220, 80), f"Добро пожаловать,", font=font_title, color="#ffffff")
+    font_title = Font(path=font_bold_path, size=40)
+    font_text = Font(path=font_reg_path, size=24)
+
+    background.text((220, 70), "Добро пожаловать,", font=font_title, color="#ffffff")
     background.text(
-        (220, 130), f"{member.display_name}!", font=font_title, color="#57F287"
+        (220, 120), f"{member.display_name}!", font=font_title, color="#57F287"
     )
+
+    # Номер участника
+    member_count = member.guild.member_count
+    background.text(
+        (220, 175),
+        f"Ты стал {member_count}-м участником!",
+        font=font_text,
+        color="#aaaaaa",
+    )
+
     return background.image_bytes
