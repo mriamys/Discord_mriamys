@@ -22,3 +22,8 @@ COLOR_ERROR = 0xED4245
 # 0 - Open Trivia DB (API)
 # 1 - Local CSV (База КХСМ.csv)
 QUIZ_DATABASE_TYPE = 1
+
+# Telegram Notifications
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_ADMIN_ID = os.getenv("TELEGRAM_ADMIN_ID")
+ADMIN_DISCORD_ID = int(os.getenv("ADMIN_DISCORD_ID", "0"))
