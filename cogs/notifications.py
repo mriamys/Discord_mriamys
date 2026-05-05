@@ -2,7 +2,13 @@ import discord
 from discord.ext import commands
 import aiohttp
 import logging
-from config import TELEGRAM_BOT_TOKEN, TELEGRAM_ADMIN_ID, ADMIN_DISCORD_ID, COLOR_SUCCESS
+from config import (
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_ADMIN_ID,
+    ADMIN_DISCORD_ID,
+    COLOR_SUCCESS,
+)
+
 
 class Notifications(commands.Cog):
     def __init__(self, bot):
@@ -17,13 +23,17 @@ class Notifications(commands.Cog):
         # Проверяем, зашел ли пользователь в канал (был ли он в канале до этого)
         if before.channel is None and after.channel is not None:
             logging.info(f"User {member} joined voice channel {after.channel.name}")
-            
+
             # Проверяем, находится ли админ в этом же канале
             guild = member.guild
             admin = guild.get_member(ADMIN_DISCORD_ID)
-            
+
             # Если админа нет в канале (или он вообще не в войсе)
-            if admin is None or admin.voice is None or admin.voice.channel != after.channel:
+            if (
+                admin is None
+                or admin.voice is None
+                or admin.voice.channel != after.channel
+            ):
                 await self.send_telegram_notification(member, after.channel)
 
     async def send_telegram_notification(self, member, channel):
@@ -32,7 +42,7 @@ class Notifications(commands.Cog):
             return
 
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        
+
         # Формируем сообщение
         text = (
             f"🔔 <b>Кто-то зашёл в войс!</b>\n\n"
@@ -43,20 +53,19 @@ class Notifications(commands.Cog):
         )
 
         async with aiohttp.ClientSession() as session:
-            payload = {
-                "chat_id": TELEGRAM_ADMIN_ID,
-                "text": text,
-                "parse_mode": "HTML"
-            }
+            payload = {"chat_id": TELEGRAM_ADMIN_ID, "text": text, "parse_mode": "HTML"}
             try:
                 async with session.post(url, json=payload) as response:
                     if response.status == 200:
                         logging.info(f"Telegram notification sent for {member}")
                     else:
                         resp_text = await response.text()
-                        logging.error(f"Failed to send Telegram notification: {response.status} - {resp_text}")
+                        logging.error(
+                            f"Failed to send Telegram notification: {response.status} - {resp_text}"
+                        )
             except Exception as e:
                 logging.error(f"Error sending Telegram notification: {e}")
+
 
 async def setup(bot):
     await bot.add_cog(Notifications(bot))

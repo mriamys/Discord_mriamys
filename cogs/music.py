@@ -249,12 +249,14 @@ class Music(commands.Cog):
         if not vc:
             try:
                 vc = await asyncio.wait_for(
-                    ctx.author.voice.channel.connect(),
-                    timeout=15.0
+                    ctx.author.voice.channel.connect(), timeout=15.0
                 )
             except (asyncio.TimeoutError, Exception) as e:
                 logging.error(f"Voice connect error: {e}")
-                return await ctx.send("❌ Не удалось подключиться к голосовому каналу. Попробуй ещё раз!", ephemeral=True)
+                return await ctx.send(
+                    "❌ Не удалось подключиться к голосовому каналу. Попробуй ещё раз!",
+                    ephemeral=True,
+                )
         else:
             # Check if we should move immediately
             # Move if: bot is not playing OR current channel has no humans (other than bot)
@@ -262,10 +264,15 @@ class Music(commands.Cog):
             if not vc.is_playing() or not listeners:
                 if vc.channel != ctx.author.voice.channel:
                     try:
-                        await asyncio.wait_for(vc.move_to(ctx.author.voice.channel), timeout=10.0)
+                        await asyncio.wait_for(
+                            vc.move_to(ctx.author.voice.channel), timeout=10.0
+                        )
                     except (asyncio.TimeoutError, Exception) as e:
                         logging.error(f"Voice move error: {e}")
-                        return await ctx.send("❌ Не удалось переподключиться к голосовому каналу. Попробуй ещё раз!", ephemeral=True)
+                        return await ctx.send(
+                            "❌ Не удалось переподключиться к голосовому каналу. Попробуй ещё раз!",
+                            ephemeral=True,
+                        )
 
         if "spotify.com/track" in search:
             await ctx.send("🔍 Парсим Spotify...", delete_after=5)
@@ -408,7 +415,9 @@ class Music(commands.Cog):
 
         except asyncio.TimeoutError:
             logging.error("Play error: TimeoutError during voice connection")
-            await ctx.send("❌ Тайм-аут подключения к голосовому каналу. Попробуй ещё раз!")
+            await ctx.send(
+                "❌ Тайм-аут подключения к голосовому каналу. Попробуй ещё раз!"
+            )
         except Exception as e:
             logging.error(f"Play error: {e}")
             await ctx.send(f"❌ Ошибка при поиске.")
@@ -476,8 +485,10 @@ class Music(commands.Cog):
     @play.error
     async def play_error(self, ctx, error):
         """Global error handler for /play — ensures Discord always gets a response."""
-        original = getattr(error, 'original', error)
-        logging.error(f"play_error handler caught: {type(original).__name__}: {original}")
+        original = getattr(error, "original", error)
+        logging.error(
+            f"play_error handler caught: {type(original).__name__}: {original}"
+        )
         try:
             if isinstance(original, asyncio.TimeoutError):
                 msg = "❌ Тайм-аут подключения к голосовому каналу. Попробуй ещё раз!"

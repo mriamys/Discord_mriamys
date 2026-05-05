@@ -102,7 +102,9 @@ async def generate_profile_card(
             getattr(member, "status", discord.Status.offline), "#747F8D"
         )
         # Подложка под статус в цвет панели
-        background.ellipse((168, 168), width=50, height=50, color=(0, 0, 0, panel_opacity))
+        background.ellipse(
+            (168, 168), width=50, height=50, color=(0, 0, 0, panel_opacity)
+        )
         background.ellipse((173, 173), width=40, height=40, color=s_color)
     except:
         pass
@@ -228,7 +230,10 @@ async def generate_profile_card(
                 )
                 # Вырез под цвет панели
                 background.ellipse(
-                    (x_pos - 1, 229), width=42, height=42, color=(0, 0, 0, panel_opacity)
+                    (x_pos - 1, 229),
+                    width=42,
+                    height=42,
+                    color=(0, 0, 0, panel_opacity),
                 )
 
                 background.paste(icon, (x_pos, 230))
