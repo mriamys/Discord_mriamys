@@ -291,13 +291,7 @@ class TwitchNotifier(commands.Cog):
                 if login == self.main_channel:
                     embed = msg.embeds[0]
                     embed.title = f"🔴 {login} закончил стрим."
-                    friends_links = "\n".join(
-                        [
-                            f"• [{f}](https://www.twitch.tv/{f})"
-                            for f in self.friend_channels
-                        ]
-                    )
-                    embed.description = f"Трансляция завершена. Спасибо всем, кто смотрел!\n\n**Пока меня нет, заглядывайте к моим друзьям:**\n{friends_links}"
+                    embed.description = "Трансляция завершена. Спасибо всем, кто смотрел!"
                     embed.set_image(url=None)
                     embed.color = discord.Color.dark_grey()
                     await msg.edit(content="Стрим завершен.", embed=embed)
