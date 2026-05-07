@@ -125,6 +125,15 @@ class Database:
                 except:
                     pass
 
+                # Таблица для отслеживания активности стримеров
+                await cur.execute("""
+                    CREATE TABLE IF NOT EXISTS streamer_activity (
+                        user_id VARCHAR(25) PRIMARY KEY,
+                        last_streamed_at DATETIME NOT NULL
+                    )
+                """)
+
+
     async def get_setting(self, key: str, default=None):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
