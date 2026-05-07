@@ -346,6 +346,26 @@ class RolesCog(commands.Cog):
 
         await ctx.send(embed=dev_embed, view=DevRoleView())
 
+        # --- EMBED ПРО РОЛЬ СТРИМЕРА ---
+        streamer_embed = discord.Embed(
+            title="🎥 РОЛЬ СТРИМЕРА",
+            description=(
+                ">>> Хочешь получить роль **[🎥] Стример**?\n\n"
+                "Роль выдаётся **автоматически** — никаких команд не нужно!\n\n"
+                "**Как это работает:**\n"
+                "1️⃣ Привяжи Twitch к Discord:\n"
+                "╰ *Настройки Discord → Связанные аккаунты → Twitch*\n"
+                "2️⃣ Начни стрим на Twitch\n"
+                "3️⃣ Роль появится автоматически ✅\n\n"
+                "⚠️ Если не стримить более **30 дней** — роль снимается автоматически."
+            ),
+            color=0x9146FF,
+        )
+        streamer_embed.set_thumbnail(
+            url="https://w7.pngwing.com/pngs/399/867/png-transparent-twitch-logo-streaming-media-twitch-logo-miscellaneous-purple-text-thumbnail.png"
+        )
+        await ctx.send(embed=streamer_embed)
+
 
 async def setup(bot):
     await bot.add_cog(RolesCog(bot))

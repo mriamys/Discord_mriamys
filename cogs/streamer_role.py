@@ -161,12 +161,16 @@ class StreamerRole(commands.Cog):
                                 title="⏰ Роль стримера снята",
                                 description=(
                                     f"Привет, **{member.display_name}**!\n\n"
-                                    f"Роль **{role.name}** была автоматически снята, "
-                                    f"так как ты не стримил(а) более **{INACTIVE_DAYS} дней**.\n\n"
-                                    f"Просто включи стрим в Discord — роль вернётся мгновенно! 🎥"
+                                    f"Роль **{role.name}** слетела автоматически — "
+                                    f"на сервере не было зафиксировано твоих стримов более **{INACTIVE_DAYS} дней**.\n\n"
+                                    f"**Как вернуть роль?**\n"
+                                    f"Убедись, что твой Twitch-аккаунт привязан к Discord "
+                                    f"*(Настройки → Связанные аккаунты → Twitch)*, "
+                                    f"и просто начни стрим — роль вернётся автоматически. 🎥"
                                 ),
                                 color=0xED4245,
                             )
+                            embed.set_footer(text="Роль выдаётся автоматически при старте Twitch-стрима")
                             await member.send(embed=embed)
                         except discord.Forbidden:
                             pass  # ЛС закрыты — молча пропускаем
