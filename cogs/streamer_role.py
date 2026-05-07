@@ -54,11 +54,14 @@ class StreamerRole(commands.Cog):
         """Записывает текущее время как дату последнего стрима."""
         async with db.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute("""
+                await cur.execute(
+                    """
                     INSERT INTO streamer_activity (user_id, last_streamed_at)
                     VALUES (%s, %s)
                     ON DUPLICATE KEY UPDATE last_streamed_at = VALUES(last_streamed_at)
-                """, (str(user_id), datetime.utcnow()))
+                """,
+                    (str(user_id), datetime.utcnow()),
+                )
 
     async def _get_last_stream(self, user_id: int) -> datetime | None:
         """Возвращает дату последнего стрима или None."""
@@ -66,7 +69,7 @@ class StreamerRole(commands.Cog):
             async with conn.cursor() as cur:
                 await cur.execute(
                     "SELECT last_streamed_at FROM streamer_activity WHERE user_id = %s",
-                    (str(user_id),)
+                    (str(user_id),),
                 )
                 row = await cur.fetchone()
                 return row["last_streamed_at"] if row else None
@@ -83,8 +86,7 @@ class StreamerRole(commands.Cog):
         async with db.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "DELETE FROM streamer_activity WHERE user_id = %s",
-                    (str(user_id),)
+                    "DELETE FROM streamer_activity WHERE user_id = %s", (str(user_id),)
                 )
 
     # ──────────────────────────────────────────────
@@ -107,12 +109,16 @@ class StreamerRole(commands.Cog):
             if now_streaming and role not in after.roles:
                 await after.add_roles(role, reason="Discord Go Live — стрим начался")
                 await self._update_last_stream(after.id)
-                logger.info(f"[StreamerRole] ✅ Выдана роль '{role.name}' → {after} ({after.id})")
+                logger.info(
+                    f"[StreamerRole] ✅ Выдана роль '{role.name}' → {after} ({after.id})"
+                )
 
             elif not now_streaming and role in after.roles:
                 # Роль НЕ снимаем сразу — только обновляем дату
                 await self._update_last_stream(after.id)
-                logger.info(f"[StreamerRole] 🎬 Стрим завершён: {after} ({after.id}), роль сохранена")
+                logger.info(
+                    f"[StreamerRole] 🎬 Стрим завершён: {after} ({after.id}), роль сохранена"
+                )
 
         except discord.Forbidden:
             logger.error(
@@ -147,7 +153,7 @@ class StreamerRole(commands.Cog):
                     try:
                         await member.remove_roles(
                             role,
-                            reason=f"Нет стримов более {INACTIVE_DAYS} дней — роль снята автоматически"
+                            reason=f"Нет стримов более {INACTIVE_DAYS} дней — роль снята автоматически",
                         )
                         await self._delete_streamer_record(member.id)
                         logger.info(
@@ -170,13 +176,17 @@ class StreamerRole(commands.Cog):
                                 ),
                                 color=0xED4245,
                             )
-                            embed.set_footer(text="Роль выдаётся автоматически при старте Twitch-стрима")
+                            embed.set_footer(
+                                text="Роль выдаётся автоматически при старте Twitch-стрима"
+                            )
                             await member.send(embed=embed)
                         except discord.Forbidden:
                             pass  # ЛС закрыты — молча пропускаем
 
                     except (discord.Forbidden, discord.HTTPException) as e:
-                        logger.error(f"[StreamerRole] Ошибка снятия роли у {member}: {e}")
+                        logger.error(
+                            f"[StreamerRole] Ошибка снятия роли у {member}: {e}"
+                        )
 
     @check_inactive_streamers.before_loop
     async def before_check(self):
@@ -201,8 +211,12 @@ class StreamerRole(commands.Cog):
             await ctx.send(embed=embed)
             return
 
-        embed.add_field(name="Роль", value=f"{role.mention} (ID: `{role.id}`)", inline=False)
-        embed.add_field(name="Порог неактивности", value=f"`{INACTIVE_DAYS}` дней", inline=True)
+        embed.add_field(
+            name="Роль", value=f"{role.mention} (ID: `{role.id}`)", inline=False
+        )
+        embed.add_field(
+            name="Порог неактивности", value=f"`{INACTIVE_DAYS}` дней", inline=True
+        )
 
         # Кто стримит сейчас
         streaming_now = [m for m in ctx.guild.members if _is_streaming(m) and not m.bot]
@@ -223,7 +237,9 @@ class StreamerRole(commands.Cog):
                     status = "⚠️ нет данных"
                 else:
                     days_ago = (datetime.utcnow() - last).days
-                    warn = " ⚠️ скоро слетит!" if last < cutoff - timedelta(days=5) else ""
+                    warn = (
+                        " ⚠️ скоро слетит!" if last < cutoff - timedelta(days=5) else ""
+                    )
                     status = f"{last.strftime('%d.%m.%Y')}{warn} ({days_ago}д назад)"
                 lines.append(f"{m.mention} — {status}")
             embed.add_field(

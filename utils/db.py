@@ -133,7 +133,6 @@ class Database:
                     )
                 """)
 
-
     async def get_setting(self, key: str, default=None):
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
