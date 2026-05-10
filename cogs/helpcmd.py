@@ -76,7 +76,7 @@ class CustomHelp(commands.Cog):
             "Отдельных команд для них вводить не нужно!",
             inline=False,
         )
-        embed.set_footer(text="Mriamys Bot | Создано при поддержке Antigravity")
+        embed.set_footer(text="Mriamys Bot")
         
         if is_wrong_channel:
             await rank_channel.send(content=ctx.author.mention, embed=embed)
