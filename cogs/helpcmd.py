@@ -13,6 +13,35 @@ class CustomHelp(commands.Cog):
         description="Показать список всех команд бота",
     )
     async def help_command(self, ctx):
+        is_wrong_channel = False
+        rank_channel = discord.utils.get(ctx.guild.text_channels, name="📜┃ранг")
+        if rank_channel and ctx.channel.id != rank_channel.id:
+            is_wrong_channel = True
+
+        if is_wrong_channel:
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(
+                    f"Перейди в канал {rank_channel.mention}, помощь отправлена туда!",
+                    ephemeral=True,
+                )
+            else:
+                try:
+                    await ctx.message.delete()
+                except Exception:
+                    pass
+                msg = await ctx.send(
+                    f"{ctx.author.mention}, список команд отправлен в {rank_channel.mention}!"
+                )
+                try:
+                    import asyncio
+
+                    self.bot.loop.create_task(msg.delete(delay=10))
+                except Exception:
+                    pass
+        else:
+            if ctx.interaction:
+                await ctx.defer()
+
         embed = discord.Embed(
             title="🌌 Путеводитель по Mriamys",
             description="Добро пожаловать! Ниже представлен функционал бота. Большинство команд поддерживают как слэш `/команда`, так и префикс `!команда`.",
@@ -48,7 +77,11 @@ class CustomHelp(commands.Cog):
             inline=False,
         )
         embed.set_footer(text="Mriamys Bot | Создано при поддержке Antigravity")
-        await ctx.send(embed=embed)
+        
+        if is_wrong_channel:
+            await rank_channel.send(content=ctx.author.mention, embed=embed)
+        else:
+            await ctx.send(embed=embed)
 
 
 async def setup(bot):

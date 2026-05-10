@@ -309,6 +309,35 @@ class Leveling(commands.Cog):
             await ctx.send("Эта команда доступна только на сервере!")
             return
 
+        is_wrong_channel = False
+        rank_channel = discord.utils.get(ctx.guild.text_channels, name="📜┃ранг")
+        if rank_channel and ctx.channel.id != rank_channel.id:
+            is_wrong_channel = True
+
+        if is_wrong_channel:
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(
+                    f"Перейди в канал {rank_channel.mention}, ТОП сгенерирован там!",
+                    ephemeral=True,
+                )
+            else:
+                try:
+                    await ctx.message.delete()
+                except Exception:
+                    pass
+                msg = await ctx.send(
+                    f"{ctx.author.mention}, ТОП отправлен в {rank_channel.mention}!"
+                )
+                try:
+                    import asyncio
+
+                    self.bot.loop.create_task(msg.delete(delay=10))
+                except Exception:
+                    pass
+        else:
+            if ctx.interaction:
+                await ctx.defer()
+
         from utils.db import db
 
         data = await db.get_leaderboard("level", limit=10)
@@ -331,7 +360,12 @@ class Leveling(commands.Cog):
             embed.description = desc
 
         view = TopView(ctx.author)
-        await ctx.send(embed=embed, view=view)
+        if is_wrong_channel:
+            await rank_channel.send(
+                content=f"{ctx.author.mention}, ТОП-10 сервера:", embed=embed, view=view
+            )
+        else:
+            await ctx.send(embed=embed, view=view)
 
     def calc_level(self, xp):
         # Формула: XP = (Уровень / 0.023) ^ 2
@@ -557,6 +591,35 @@ class Leveling(commands.Cog):
     async def stat(self, ctx, member: discord.Member = None):
         member = member or ctx.author
 
+        is_wrong_channel = False
+        rank_channel = discord.utils.get(ctx.guild.text_channels, name="📜┃ранг")
+        if rank_channel and ctx.channel.id != rank_channel.id:
+            is_wrong_channel = True
+
+        if is_wrong_channel:
+            if ctx.interaction:
+                await ctx.interaction.response.send_message(
+                    f"Перейди в канал {rank_channel.mention}, статистика сгенерирована там!",
+                    ephemeral=True,
+                )
+            else:
+                try:
+                    await ctx.message.delete()
+                except Exception:
+                    pass
+                msg = await ctx.send(
+                    f"{ctx.author.mention}, статистика отправлена в {rank_channel.mention}!"
+                )
+                try:
+                    import asyncio
+
+                    self.bot.loop.create_task(msg.delete(delay=10))
+                except Exception:
+                    pass
+        else:
+            if ctx.interaction:
+                await ctx.defer()
+
         user_data = await db.get_user(str(member.id))
         achievements = await db.get_achievements(str(member.id))
 
@@ -626,7 +689,10 @@ class Leveling(commands.Cog):
                 name="✨ Активные бонусы", value="\n".join(bonuses), inline=False
             )
 
-        await ctx.send(embed=embed)
+        if is_wrong_channel:
+            await rank_channel.send(content=f"{ctx.author.mention}, твоя статистика:", embed=embed)
+        else:
+            await ctx.send(embed=embed)
 
 
 async def setup(bot):
