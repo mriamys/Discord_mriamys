@@ -609,8 +609,11 @@ class QuizBetModal(discord.ui.Modal):
             )
             return
         user_data = await db.get_user(str(interaction.user.id))
-        if user_data.get("vibecoins", 0) < bet:
-            await interaction.followup.send("❌ Мало коинов!", ephemeral=True)
+        balance = user_data.get("vibecoins", 0)
+        if balance < bet:
+            await interaction.followup.send(
+                f"❌ Мало коинов! Твой баланс: **{balance:,} 🪙**", ephemeral=True
+            )
             return
         if self.mode == "solo":
             q = await fetch_question()
@@ -655,8 +658,11 @@ class QuizBetView(View):
     async def start(self, interaction, bet):
         await interaction.response.defer(ephemeral=True)
         user_data = await db.get_user(str(interaction.user.id))
-        if user_data.get("vibecoins", 0) < bet:
-            await interaction.followup.send("❌ Недостаточно коинов!", ephemeral=True)
+        balance = user_data.get("vibecoins", 0)
+        if balance < bet:
+            await interaction.followup.send(
+                f"❌ Недостаточно коинов! Твой баланс: **{balance:,} 🪙**", ephemeral=True
+            )
             return
         if self.mode == "solo":
             q = await fetch_question()

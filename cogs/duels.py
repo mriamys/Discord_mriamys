@@ -64,7 +64,7 @@ class DuelAcceptView(View):
             return
         if c_balance < self.bet:
             await interaction.response.send_message(
-                f"❌ У {self.challenger.display_name} уже нет денег на эту ставку!",
+                f"❌ У {self.challenger.display_name} уже нет денег на эту ставку! Баланс: **{c_balance:,} 🪙**",
                 ephemeral=True,
             )
             return

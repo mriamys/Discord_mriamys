@@ -98,9 +98,11 @@ class BlackjackBetModal(discord.ui.Modal):
             return
 
         user_data = await db.get_user(str(interaction.user.id))
-        if user_data.get("vibecoins", 0) < bet:
+        balance = user_data.get("vibecoins", 0)
+        if balance < bet:
             await interaction.response.send_message(
-                "❌ У тебя нет столько коинов!", ephemeral=True
+                f"❌ У тебя нет столько коинов! Твой баланс: **{balance:,} 🪙**",
+                ephemeral=True,
             )
             return
 
@@ -144,9 +146,10 @@ class BlackjackBetView(View):
 
     async def start(self, interaction, bet):
         user_data = await db.get_user(str(interaction.user.id))
-        if user_data.get("vibecoins", 0) < bet:
+        balance = user_data.get("vibecoins", 0)
+        if balance < bet:
             await interaction.response.send_message(
-                "❌ Недостаточно коинов!", ephemeral=True
+                f"❌ Недостаточно коинов! Твой баланс: **{balance:,} 🪙**", ephemeral=True
             )
             return
 
@@ -505,13 +508,16 @@ class BlackjackDuelContinueView(View):
         u1_data = await db.get_user(str(self.p1.id))
         u2_data = await db.get_user(str(self.p2.id))
 
-        if (
-            u1_data.get("vibecoins", 0) < self.bet
-            or u2_data.get("vibecoins", 0) < self.bet
-        ):
-            await interaction.followup.send(
-                "❌ У кого-то недостаточно коинов для реванша!", ephemeral=True
-            )
+        b1, b2 = u1_data.get("vibecoins", 0), u2_data.get("vibecoins", 0)
+        if b1 < self.bet or b2 < self.bet:
+            if b1 < self.bet and b2 < self.bet:
+                msg = f"❌ У обоих недостаточно коинов! Балансы: {self.p1.display_name} ({b1:,}), {self.p2.display_name} ({b2:,})"
+            elif b1 < self.bet:
+                msg = f"❌ У {self.p1.display_name} недостаточно коинов! Баланс: **{b1:,} 🪙**"
+            else:
+                msg = f"❌ У {self.p2.display_name} недостаточно коинов! Баланс: **{b2:,} 🪙**"
+            
+            await interaction.followup.send(msg, ephemeral=True)
             self.started = False
             return
 

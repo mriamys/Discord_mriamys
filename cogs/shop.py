@@ -67,11 +67,15 @@ class GameDuelInviteView(View):
 
         u1_data = await db.get_user(str(self.challenger_id))
         u2_data = await db.get_user(str(self.target_id))
-        if (
-            u1_data.get("vibecoins", 0) < self.bet
-            or u2_data.get("vibecoins", 0) < self.bet
-        ):
-            await interaction.followup.send("❌ У кого-то не хватает коинов!")
+        b1, b2 = u1_data.get("vibecoins", 0), u2_data.get("vibecoins", 0)
+        if b1 < self.bet or b2 < self.bet:
+            if b1 < self.bet and b2 < self.bet:
+                msg = f"❌ У обоих не хватает коинов! Балансы: {challenger.display_name} ({b1:,}), {interaction.user.display_name} ({b2:,})"
+            elif b1 < self.bet:
+                msg = f"❌ У {challenger.display_name} не хватает коинов! Баланс: **{b1:,} 🪙**"
+            else:
+                msg = f"❌ У тебя не хватает коинов! Баланс: **{b2:,} 🪙**"
+            await interaction.followup.send(msg)
             return
 
         await db.update_user(
@@ -219,8 +223,11 @@ class ShopView(View):
     async def buy_xp(self, interaction, button):
         await interaction.response.defer(ephemeral=True)
         u_data = await db.get_user(str(interaction.user.id))
-        if u_data.get("vibecoins", 0) < 2500:
-            await interaction.followup.send("❌ Мало коинов!", ephemeral=True)
+        balance = u_data.get("vibecoins", 0)
+        if balance < 2500:
+            await interaction.followup.send(
+                f"❌ Мало коинов! Твой баланс: **{balance:,} 🪙**", ephemeral=True
+            )
             return
 
         # Проверка на активный буст
@@ -272,8 +279,11 @@ class ShopView(View):
     async def buy_meme(self, interaction, button):
         await interaction.response.defer(ephemeral=True)
         u_data = await db.get_user(str(interaction.user.id))
-        if u_data.get("vibecoins", 0) < 2000:
-            await interaction.followup.send("❌ Мало коинов!", ephemeral=True)
+        balance = u_data.get("vibecoins", 0)
+        if balance < 2000:
+            await interaction.followup.send(
+                f"❌ Мало коинов! Твой баланс: **{balance:,} 🪙**", ephemeral=True
+            )
             return
         await db.update_user(
             str(interaction.user.id),
@@ -523,8 +533,11 @@ class NicknameModal(Modal):
     async def on_submit(self, interaction):
         await interaction.response.defer(ephemeral=True)
         user_data = await db.get_user(str(interaction.user.id))
-        if user_data.get("vibecoins", 0) < 1000:
-            await interaction.followup.send("❌ Мало коинов!", ephemeral=True)
+        balance = user_data.get("vibecoins", 0)
+        if balance < 1000:
+            await interaction.followup.send(
+                f"❌ Мало коинов! Твой баланс: **{balance:,} 🪙**", ephemeral=True
+            )
             return
         try:
             old_nick = self.target.display_name
@@ -570,8 +583,11 @@ class FakeStatusModal(Modal):
     async def on_submit(self, interaction):
         await interaction.response.defer(ephemeral=True)
         user_data = await db.get_user(str(interaction.user.id))
-        if user_data.get("vibecoins", 0) < 500:
-            await interaction.followup.send("❌ Мало коинов!", ephemeral=True)
+        balance = user_data.get("vibecoins", 0)
+        if balance < 500:
+            await interaction.followup.send(
+                f"❌ Мало коинов! Твой баланс: **{balance:,} 🪙**", ephemeral=True
+            )
             return
         try:
             old_nick = interaction.user.display_name
