@@ -569,7 +569,18 @@ class NicknameSelectView(View):
 
     @discord.ui.select(cls=UserSelect, placeholder="Выбери участника...")
     async def select_user(self, interaction, select):
-        await interaction.response.send_modal(NicknameModal(select.values[0]))
+        target = select.values[0]
+        if target.id == interaction.user.id:
+            await interaction.response.send_message(
+                "❌ Нельзя менять ник самому себе!", ephemeral=True
+            )
+            return
+        if target.bot:
+            await interaction.response.send_message(
+                "❌ Нельзя менять ник боту!", ephemeral=True
+            )
+            return
+        await interaction.response.send_modal(NicknameModal(target))
 
 
 class FakeStatusModal(Modal):
