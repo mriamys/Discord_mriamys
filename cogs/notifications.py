@@ -15,7 +15,12 @@ class Notifications(commands.Cog):
         self.bot = bot
 
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before, after):
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ) -> None:
         # Игнорируем ботов
         if member.bot:
             return
@@ -34,18 +39,48 @@ class Notifications(commands.Cog):
                 or admin.voice is None
                 or admin.voice.channel != after.channel
             ):
-                await self.send_telegram_notification(member, after.channel)
+                await self.send_telegram_notification(
+                    member, after.channel, event_type="join"
+                )
 
-    async def send_telegram_notification(self, member, channel):
+        # Проверяем, вышел ли пользователь из канала (был ли он в канале и теперь его нет)
+        elif before.channel is not None and after.channel is None:
+            logging.info(f"User {member} left voice channel {before.channel.name}")
+
+            # Проверяем, находился ли админ в этом же канале
+            guild = member.guild
+            admin = guild.get_member(ADMIN_DISCORD_ID)
+
+            # Если админа нет в канале (или он вообще не в войсе)
+            if (
+                admin is None
+                or admin.voice is None
+                or admin.voice.channel != before.channel
+            ):
+                await self.send_telegram_notification(
+                    member, before.channel, event_type="leave"
+                )
+
+    async def send_telegram_notification(
+        self,
+        member: discord.Member,
+        channel: discord.VoiceChannel,
+        event_type: str = "join",
+    ) -> None:
         if not TELEGRAM_BOT_TOKEN or not TELEGRAM_ADMIN_ID:
             logging.warning("Telegram credentials not set in config/env")
             return
 
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
-        # Формируем сообщение
+        # Формируем сообщение в зависимости от события
+        if event_type == "join":
+            title = "🔔 <b>Кто-то зашёл в войс!</b>"
+        else:
+            title = "🔕 <b>Кто-то вышел из войса!</b>"
+
         text = (
-            f"🔔 <b>Кто-то зашёл в войс!</b>\n\n"
+            f"{title}\n\n"
             f"👤 <b>Пользователь:</b> {member.display_name} ({member})\n"
             f"🎤 <b>Канал:</b> {channel.name}\n"
             f"🌐 <b>Сервер:</b> {member.guild.name}\n"
