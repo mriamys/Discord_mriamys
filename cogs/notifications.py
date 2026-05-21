@@ -21,8 +21,8 @@ class Notifications(commands.Cog):
         before: discord.VoiceState,
         after: discord.VoiceState,
     ) -> None:
-        # Игнорируем ботов
-        if member.bot:
+        # Игнорируем ботов и самого себя (админа)
+        if member.bot or member.id == ADMIN_DISCORD_ID:
             return
 
         # Проверяем, зашел ли пользователь в канал (был ли он в канале до этого)

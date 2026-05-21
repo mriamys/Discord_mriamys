@@ -11,17 +11,18 @@ class Welcome(commands.Cog):
         self.bot = bot
 
     async def get_welcome_channel(self, guild: discord.Guild):
-        # 1. Сначала проверяем системный канал Discord
-        if guild.system_channel:
-            return guild.system_channel
-
-        # 2. Иначе ищем по ключевым словам в названии
+        # 1. Сначала ищем по ключевым словам в названии
         keywords = ["приветик", "привет", "welcome", "встреча"]
         for ch in guild.text_channels:
             ch_name = ch.name.lower()
             if any(k in ch_name for k in keywords):
                 if ch.permissions_for(guild.me).send_messages:
                     return ch
+
+        # 2. Иначе проверяем системный канал Discord
+        if guild.system_channel and guild.system_channel.permissions_for(guild.me).send_messages:
+            return guild.system_channel
+
         return None
 
     @commands.Cog.listener()
