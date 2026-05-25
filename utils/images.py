@@ -47,6 +47,12 @@ async def generate_profile_card(
     if user_achievements is None:
         user_achievements = []
 
+    # Пытаемся получить объект участника из кэша гильдии для актуального статуса (presence)
+    if hasattr(member, "guild") and member.guild:
+        cached_member = member.guild.get_member(member.id)
+        if cached_member:
+            member = cached_member
+
     theme_lvl = (level // 5) * 5
     theme_color = LEVEL_THEMES.get(
         theme_lvl, LEVEL_THEMES[max(k for k in LEVEL_THEMES.keys() if k <= level)]
@@ -97,6 +103,11 @@ async def generate_profile_card(
             discord.Status.dnd: "#F04747",
             discord.Status.offline: "#747F8D",
             discord.Status.invisible: "#747F8D",
+            "online": "#43B581",
+            "idle": "#FAA61A",
+            "dnd": "#F04747",
+            "offline": "#747F8D",
+            "invisible": "#747F8D",
         }
         s_color = status_colors.get(
             getattr(member, "status", discord.Status.offline), "#747F8D"
