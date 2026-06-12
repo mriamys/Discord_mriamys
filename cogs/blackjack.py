@@ -149,7 +149,8 @@ class BlackjackBetView(View):
         balance = user_data.get("vibecoins", 0)
         if balance < bet:
             await interaction.response.send_message(
-                f"❌ Недостаточно коинов! Твой баланс: **{balance:,} 🪙**", ephemeral=True
+                f"❌ Недостаточно коинов! Твой баланс: **{balance:,} 🪙**",
+                ephemeral=True,
             )
             return
 
@@ -516,7 +517,7 @@ class BlackjackDuelContinueView(View):
                 msg = f"❌ У {self.p1.display_name} недостаточно коинов! Баланс: **{b1:,} 🪙**"
             else:
                 msg = f"❌ У {self.p2.display_name} недостаточно коинов! Баланс: **{b2:,} 🪙**"
-            
+
             await interaction.followup.send(msg, ephemeral=True)
             self.started = False
             return

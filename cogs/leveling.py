@@ -685,7 +685,9 @@ class Leveling(commands.Cog):
             )
 
         if is_wrong_channel:
-            await rank_channel.send(content=f"{ctx.author.mention}, твоя статистика:", embed=embed)
+            await rank_channel.send(
+                content=f"{ctx.author.mention}, твоя статистика:", embed=embed
+            )
         else:
             await ctx.send(embed=embed)
 

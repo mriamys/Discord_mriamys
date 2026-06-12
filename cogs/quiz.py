@@ -661,7 +661,8 @@ class QuizBetView(View):
         balance = user_data.get("vibecoins", 0)
         if balance < bet:
             await interaction.followup.send(
-                f"❌ Недостаточно коинов! Твой баланс: **{balance:,} 🪙**", ephemeral=True
+                f"❌ Недостаточно коинов! Твой баланс: **{balance:,} 🪙**",
+                ephemeral=True,
             )
             return
         if self.mode == "solo":

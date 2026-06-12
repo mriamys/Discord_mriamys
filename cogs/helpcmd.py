@@ -77,7 +77,7 @@ class CustomHelp(commands.Cog):
             inline=False,
         )
         embed.set_footer(text="Mriamys Bot")
-        
+
         if is_wrong_channel:
             await rank_channel.send(content=ctx.author.mention, embed=embed)
         else:

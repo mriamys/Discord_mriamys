@@ -20,7 +20,10 @@ class Welcome(commands.Cog):
                     return ch
 
         # 2. Иначе проверяем системный канал Discord
-        if guild.system_channel and guild.system_channel.permissions_for(guild.me).send_messages:
+        if (
+            guild.system_channel
+            and guild.system_channel.permissions_for(guild.me).send_messages
+        ):
             return guild.system_channel
 
         return None
