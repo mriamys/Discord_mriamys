@@ -17,7 +17,7 @@ class Logger(commands.Cog):
     def cog_unload(self):
         self.db_backup_loop.cancel()
 
-    @tasks.loop(hours=24)
+    @tasks.loop(time=datetime.time(hour=3, minute=0, tzinfo=datetime.timezone.utc))
     async def db_backup_loop(self):
         try:
             # Получаем все таблицы из БД
