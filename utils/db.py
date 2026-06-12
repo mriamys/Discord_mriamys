@@ -240,9 +240,40 @@ class Database:
 
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                query = f"SELECT user_id, level, xp, vibecoins, streak, voice_time_seconds FROM users {where_clause} ORDER BY {order_by} LIMIT %s"
-                await cur.execute(query, (limit,))
-                return await cur.fetchall()
+                # Добавляем last_daily в выборку
+                query = f"SELECT user_id, level, xp, vibecoins, streak, voice_time_seconds, last_daily FROM users {where_clause} ORDER BY {order_by}"
+                if category != "streak":
+                    query += f" LIMIT {limit}"
+                
+                await cur.execute(query)
+                rows = await cur.fetchall()
+
+                if category == "streak":
+                    from datetime import datetime, timedelta
+                    from zoneinfo import ZoneInfo
+                    
+                    filtered_rows = []
+                    kyiv_tz = ZoneInfo("Europe/Kyiv")
+                    today = datetime.now(kyiv_tz).date()
+                    
+                    for row in rows:
+                        last_daily = row.get("last_daily")
+                        if last_daily:
+                            if isinstance(last_daily, str):
+                                last_daily = datetime.strptime(str(last_daily).split(".")[0], "%Y-%m-%d %H:%M:%S")
+                            
+                            last_daily_date = last_daily.replace(tzinfo=ZoneInfo("UTC")).astimezone(kyiv_tz).date()
+                            
+                            # Если last_daily_date < today - 1 day, то стрик просрочен (сегодня не заходил и вчера не заходил)
+                            if last_daily_date < today - timedelta(days=1):
+                                continue  # Пропускаем, стрик фактически потерян
+                        
+                        filtered_rows.append(row)
+                        if len(filtered_rows) >= limit:
+                            break
+                    return filtered_rows
+
+                return rows
 
     async def get_expired_boosts(self):
         async with self.pool.acquire() as conn:

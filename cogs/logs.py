@@ -2,7 +2,11 @@ import discord
 from discord.ext import commands, tasks
 import logging
 import os
-from config import COLOR_SUCCESS, COLOR_ERROR
+import json
+import datetime
+import aiohttp
+from config import COLOR_SUCCESS, COLOR_ERROR, TELEGRAM_BOT_TOKEN, TELEGRAM_ADMIN_ID
+from utils.db import db
 
 
 class Logger(commands.Cog):
@@ -16,20 +20,67 @@ class Logger(commands.Cog):
     @tasks.loop(hours=24)
     async def db_backup_loop(self):
         try:
-            db_path = "data/mriamys.db"
-            if not os.path.exists(db_path):
+            # Получаем все таблицы из БД
+            tables = ['users', 'global_settings', 'profile_settings', 'user_achievements', 'streamer_activity']
+            backup_data = {}
+            
+            if db.pool is None:
+                logging.warning("Database pool is not ready for backup.")
                 return
 
+            async with db.pool.acquire() as conn:
+                async with conn.cursor() as cur:
+                    for table in tables:
+                        try:
+                            await cur.execute(f"SELECT * FROM {table}")
+                            rows = await cur.fetchall()
+                            # Конвертируем datetime в строку для JSON
+                            for row in rows:
+                                for k, v in row.items():
+                                    if isinstance(v, (datetime.datetime, datetime.date)):
+                                        row[k] = v.isoformat()
+                            backup_data[table] = rows
+                        except Exception as e:
+                            logging.error(f"Error fetching table {table}: {e}")
+
+            file_path = "mriamys_backup.json"
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(backup_data, f, ensure_ascii=False, indent=4)
+
+            # Отправляем в Telegram
+            if TELEGRAM_BOT_TOKEN and TELEGRAM_ADMIN_ID:
+                url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendDocument"
+                data = aiohttp.FormData()
+                data.add_field('chat_id', str(TELEGRAM_ADMIN_ID))
+                data.add_field('document', open(file_path, 'rb'), filename=f"backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json")
+                data.add_field('caption', "💾 Автоматический бэкап базы данных (MySQL -> JSON)")
+                
+                async with aiohttp.ClientSession() as session:
+                    try:
+                        async with session.post(url, data=data) as response:
+                            if response.status == 200:
+                                logging.info("DB backup sent to Telegram successfully.")
+                            else:
+                                resp_text = await response.text()
+                                logging.error(f"Failed to send DB to Telegram: {response.status} - {resp_text}")
+                    except Exception as e:
+                        logging.error(f"Error sending DB backup to Telegram: {e}")
+
+            # Отправляем в логи Discord
             for guild in self.bot.guilds:
                 log_channel = await self.get_log_channel(guild)
                 if log_channel:
                     embed = discord.Embed(
                         title="💾 Автоматический Бэкап Базы Данных",
-                        description="Ежедневная копия файла `mriamys.db` (Уровни, валюта, настройки).\n*Сохраните этот файл, если хотите перенести бота на другой сервер!*",
+                        description="Ежедневная копия таблиц MySQL.\n*Сохраните этот файл, если хотите перенести бота на другой сервер!*",
                         color=0x2ECC71,
                         timestamp=discord.utils.utcnow(),
                     )
-                    await log_channel.send(embed=embed, file=discord.File(db_path))
+                    try:
+                        await log_channel.send(embed=embed, file=discord.File(file_path))
+                    except Exception as e:
+                        logging.error(f"Error sending DB backup to Discord: {e}")
+                        
         except Exception as e:
             logging.error(f"Error during DB Backup: {e}")
 
