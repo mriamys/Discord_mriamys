@@ -212,12 +212,12 @@ class ProfileView(discord.ui.View):
 
 
 class TopView(discord.ui.View):
-    def __init__(self, author: discord.Member):
-        super().__init__(timeout=120)
-        self.author = author
+    def __init__(self):
+        super().__init__(timeout=None)
 
     @discord.ui.select(
         placeholder="Выберите категорию...",
+        custom_id="top_category_select",
         options=[
             discord.SelectOption(
                 label="🏆 Уровень (XP)",
@@ -244,11 +244,6 @@ class TopView(discord.ui.View):
     async def select_category(
         self, interaction: discord.Interaction, select: discord.ui.Select
     ):
-        if interaction.user.id != self.author.id:
-            await interaction.response.send_message(
-                "Это меню не для вас!", ephemeral=True
-            )
-            return
 
         category = select.values[0]
         await interaction.response.defer()
@@ -359,7 +354,7 @@ class Leveling(commands.Cog):
                 desc += f"{medal} {name} — **{val}**\n"
             embed.description = desc
 
-        view = TopView(ctx.author)
+        view = TopView()
         if is_wrong_channel:
             await rank_channel.send(
                 content=f"{ctx.author.mention}, ТОП-10 сервера:", embed=embed, view=view

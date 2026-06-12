@@ -229,19 +229,19 @@ class Database:
 
     async def get_leaderboard(self, category: str, limit: int = 10):
         order_by = "xp DESC"
+        where_clause = ""
         if category == "coins":
             order_by = "vibecoins DESC"
         elif category == "voice":
             order_by = "voice_time_seconds DESC"
         elif category == "streak":
             order_by = "streak DESC"
+            where_clause = "WHERE streak_lost_at IS NULL AND streak > 0"
 
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
-                await cur.execute(
-                    f"SELECT user_id, level, xp, vibecoins, streak, voice_time_seconds FROM users ORDER BY {order_by} LIMIT %s",
-                    (limit,),
-                )
+                query = f"SELECT user_id, level, xp, vibecoins, streak, voice_time_seconds FROM users {where_clause} ORDER BY {order_by} LIMIT %s"
+                await cur.execute(query, (limit,))
                 return await cur.fetchall()
 
     async def get_expired_boosts(self):
