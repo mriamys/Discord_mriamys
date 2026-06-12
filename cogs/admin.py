@@ -24,6 +24,7 @@ class Admin(commands.Cog):
         embed.add_field(
             name="💰 Экономика и Магазин",
             value="`/give-money <user> <amount>` — Выдать VibeКоины (Owner only).\n"
+            "`/give-streak <user> <amount>` — Установить стрик (Owner only).\n"
             "`/setup_shop` — Инициализировать канал магазина.\n"
             "`/clear_threads` — Удалить все игровые комнаты (ветки) в канале.",
             inline=False,

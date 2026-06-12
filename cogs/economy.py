@@ -9,6 +9,121 @@ from zoneinfo import ZoneInfo
 import logging
 from config import PREFIX
 
+# Константы системы восстановления стриков
+STREAK_MAX_RESTORES_PER_MONTH = 3
+STREAK_RESTORE_WINDOW_HOURS = 48
+
+
+class StreakRestoreView(discord.ui.View):
+    """View с кнопкой восстановления стрика (TikTok-стиль)."""
+
+    def __init__(self, user_id: str, lost_streak: int, restores_left: int):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+        self.lost_streak = lost_streak
+        self.restores_left = restores_left
+
+    @discord.ui.button(
+        label="🔄 Восстановить стрик",
+        style=discord.ButtonStyle.success,
+        custom_id="streak_restore_btn",
+    )
+    async def restore_streak(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        if str(interaction.user.id) != self.user_id:
+            await interaction.response.send_message(
+                "❌ Это не твоя кнопка.", ephemeral=True
+            )
+            return
+
+        user_data = await db.get_user(self.user_id)
+        streak_lost_at = user_data.get("streak_lost_at")
+
+        # Проверяем что стрик ещё в состоянии "потерян"
+        if not streak_lost_at:
+            await interaction.response.send_message(
+                "✅ Твой стрик уже восстановлен или активен!", ephemeral=True
+            )
+            button.disabled = True
+            await interaction.message.edit(view=self)
+            return
+
+        # Проверяем 48ч окно
+        if isinstance(streak_lost_at, str):
+            streak_lost_at = datetime.strptime(
+                str(streak_lost_at).split(".")[0], "%Y-%m-%d %H:%M:%S"
+            )
+        hours_passed = (datetime.utcnow() - streak_lost_at).total_seconds() / 3600
+        if hours_passed > STREAK_RESTORE_WINDOW_HOURS:
+            await interaction.response.send_message(
+                f"⏰ Окно восстановления ({STREAK_RESTORE_WINDOW_HOURS}ч) истекло. Стрик сброшен.",
+                ephemeral=True,
+            )
+            await db.update_user(
+                self.user_id,
+                streak=1,
+                streak_lost_at=None,
+                streak_before_loss=0,
+            )
+            button.disabled = True
+            await interaction.message.edit(view=self)
+            return
+
+        # Проверяем лимит попыток (с автосбросом при смене месяца)
+        kyiv_tz = ZoneInfo("Europe/Kyiv")
+        current_month = datetime.now(kyiv_tz).month
+        restores_month = user_data.get("streak_restores_month", 0)
+        restores_used = user_data.get("streak_restores_used", 0)
+
+        if restores_month != current_month:
+            restores_used = 0
+            restores_month = current_month
+
+        if restores_used >= STREAK_MAX_RESTORES_PER_MONTH:
+            await interaction.response.send_message(
+                f"❌ Ты уже использовал все **{STREAK_MAX_RESTORES_PER_MONTH}** восстановления в этом месяце.",
+                ephemeral=True,
+            )
+            await db.update_user(
+                self.user_id,
+                streak=1,
+                streak_lost_at=None,
+                streak_before_loss=0,
+            )
+            button.disabled = True
+            await interaction.message.edit(view=self)
+            return
+
+        # Восстанавливаем стрик!
+        restored_streak = user_data.get("streak_before_loss", self.lost_streak)
+        restores_used += 1
+
+        await db.update_user(
+            self.user_id,
+            streak=restored_streak,
+            streak_lost_at=None,
+            streak_before_loss=0,
+            streak_restores_used=restores_used,
+            streak_restores_month=restores_month,
+            last_daily=datetime.utcnow(),
+        )
+
+        remaining = STREAK_MAX_RESTORES_PER_MONTH - restores_used
+        embed = discord.Embed(
+            title="🔥 СТРИК ВОССТАНОВЛЕН!",
+            description=(
+                f"Твой стрик вернулся: **{restored_streak} дней** 🎉\n\n"
+                f"Осталось восстановлений в этом месяце: **{remaining}/{STREAK_MAX_RESTORES_PER_MONTH}**"
+            ),
+            color=0x57F287,
+        )
+
+        button.disabled = True
+        button.label = "✅ Восстановлено!"
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
 
 class Economy(commands.Cog):
     def __init__(self, bot):
@@ -297,11 +412,12 @@ class Economy(commands.Cog):
         total_voice_time = old_seconds + duration
         delta_minutes = (total_voice_time // 60) - (old_seconds // 60)
 
-        # Стрик система (упрощенно как было)
+        # Стрик система с мягким сбросом (TikTok-стиль)
         kyiv_tz = ZoneInfo("Europe/Kyiv")
         today = datetime.now(kyiv_tz).date()
         last_daily = user_data.get("last_daily")
         streak = user_data.get("streak", 0)
+        streak_lost_at = user_data.get("streak_lost_at")
         last_daily_date = None
         streak_xp_bonus = 0
         if last_daily:
@@ -316,14 +432,107 @@ class Economy(commands.Cog):
         streak_bonus = 0
         if last_daily_date != today:
             if last_daily_date == today - timedelta(days=1):
+                # Стрик продолжается — отменяем потерю, если была
+                if streak_lost_at:
+                    await db.update_user(
+                        user_id,
+                        streak_lost_at=None,
+                        streak_before_loss=0,
+                    )
                 streak += 1
             else:
-                streak = 1
-            last_daily = datetime.utcnow()
-            streak_bonus = min(streak * 100, 5000)
-            streak_xp_bonus = streak_bonus // 2
+                # Пропущен день — мягкий сброс
+                if streak > 1 and not streak_lost_at:
+                    # Первый раз замечаем пропуск — помечаем стрик как потерянный
+                    current_month = datetime.now(kyiv_tz).month
+                    restores_month = user_data.get("streak_restores_month", 0)
+                    restores_used = user_data.get("streak_restores_used", 0)
 
-            if u:
+                    if restores_month != current_month:
+                        restores_used = 0
+
+                    restores_left = STREAK_MAX_RESTORES_PER_MONTH - restores_used
+
+                    if restores_left > 0:
+                        # Есть попытки — сохраняем стрик и предлагаем восстановление
+                        await db.update_user(
+                            user_id,
+                            streak_lost_at=datetime.utcnow(),
+                            streak_before_loss=streak,
+                        )
+
+                        if u:
+                            embed = discord.Embed(
+                                title="💔 СТРИК ПОД УГРОЗОЙ!",
+                                description=(
+                                    f"Ты пропустил день и можешь потерять свой стрик: **{streak} дней** 🔥\n\n"
+                                    f"У тебя есть **{STREAK_RESTORE_WINDOW_HOURS} часов** чтобы восстановить его!\n"
+                                    f"Попыток осталось: **{restores_left}/{STREAK_MAX_RESTORES_PER_MONTH}** в этом месяце"
+                                ),
+                                color=0xFF4500,
+                            )
+                            view = StreakRestoreView(
+                                user_id, streak, restores_left
+                            )
+                            try:
+                                await u.send(embed=embed, view=view)
+                            except Exception:
+                                pass
+
+                        # Не сбрасываем стрик — ждём решения юзера
+                        # Но и не начисляем бонус за сегодня
+                        streak_bonus = 0
+                        streak_xp_bonus = 0
+                        # Не обновляем last_daily и streak пока что
+                        last_daily = user_data.get("last_daily")
+                    else:
+                        # Попыток нет — жёсткий сброс
+                        streak = 1
+                elif streak_lost_at:
+                    # Стрик уже был помечен как потерянный — проверяем 48ч окно
+                    if isinstance(streak_lost_at, str):
+                        streak_lost_at = datetime.strptime(
+                            str(streak_lost_at).split(".")[0],
+                            "%Y-%m-%d %H:%M:%S",
+                        )
+                    hours_passed = (
+                        datetime.utcnow() - streak_lost_at
+                    ).total_seconds() / 3600
+
+                    if hours_passed > STREAK_RESTORE_WINDOW_HOURS:
+                        # Окно истекло — финальный сброс
+                        streak = 1
+                        await db.update_user(
+                            user_id,
+                            streak_lost_at=None,
+                            streak_before_loss=0,
+                        )
+                    else:
+                        # Ещё в окне — не трогаем стрик, не начисляем бонус
+                        streak_bonus = 0
+                        streak_xp_bonus = 0
+                        last_daily = user_data.get("last_daily")
+                else:
+                    # Стрик был 0 или 1 — просто ставим 1
+                    streak = 1
+
+            # Начисляем бонус только если стрик не в состоянии потери
+            if not user_data.get("streak_lost_at") or streak_bonus != 0:
+                if streak_bonus == 0 and last_daily_date != today:
+                    if not user_data.get("streak_lost_at") or (
+                        streak_lost_at
+                        and isinstance(streak_lost_at, datetime)
+                        and (
+                            datetime.utcnow() - streak_lost_at
+                        ).total_seconds()
+                        / 3600
+                        > STREAK_RESTORE_WINDOW_HOURS
+                    ):
+                        last_daily = datetime.utcnow()
+                        streak_bonus = min(streak * 100, 5000)
+                        streak_xp_bonus = streak_bonus // 2
+
+            if streak_bonus > 0 and u:
                 embed = discord.Embed(
                     title="🔥 ТВОЙ ВОЙС-СТРИК ОБНОВЛЕН!",
                     description=f"Твоя серия общения продолжается! День: **{streak}**\n\nБонус за сегодня:\n💰 **{streak_bonus} 🪙**\n⭐ **{streak_xp_bonus} XP**",
@@ -343,7 +552,7 @@ class Economy(commands.Cog):
 
                 try:
                     await u.send(embed=embed)
-                except:
+                except Exception:
                     pass
                 self.bot.dispatch("streak_updated", u, streak)
 
@@ -402,6 +611,41 @@ class Economy(commands.Cog):
         await interaction.response.send_message(
             f"✅ Выдано **{amount} 🪙** {member.mention}. Итого: **{new_coins} 🪙**"
         )
+
+    @discord.app_commands.command(
+        name="give-streak",
+        description="[Admin] Установить стрик пользователю",
+    )
+    @discord.app_commands.default_permissions(administrator=True)
+    async def give_streak(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        amount: int,
+    ):
+        if interaction.user.id != interaction.guild.owner_id:
+            return await interaction.response.send_message(
+                "❌ Только для владельца.", ephemeral=True
+            )
+
+        if amount < 0:
+            return await interaction.response.send_message(
+                "❌ Стрик не может быть отрицательным.", ephemeral=True
+            )
+
+        await db.update_user(
+            str(member.id),
+            streak=amount,
+            last_daily=datetime.utcnow(),
+            streak_lost_at=None,
+            streak_before_loss=0,
+        )
+
+        await interaction.response.send_message(
+            f"✅ Стрик {member.mention} установлен на **{amount} 🔥**"
+        )
+
+        self.bot.dispatch("streak_updated", member, amount)
 
 
 async def setup(bot):

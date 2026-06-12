@@ -88,6 +88,12 @@ class Database:
                     ("quests_completed", "INT DEFAULT 0"),
                     ("bj_wins", "INT DEFAULT 0"),
                     ("quiz_correct", "INT DEFAULT 0"),
+                    ("streak", "INT DEFAULT 0"),
+                    ("last_daily", "DATETIME DEFAULT NULL"),
+                    ("streak_restores_used", "INT DEFAULT 0"),
+                    ("streak_restores_month", "INT DEFAULT 0"),
+                    ("streak_lost_at", "DATETIME DEFAULT NULL"),
+                    ("streak_before_loss", "INT DEFAULT 0"),
                 ]
 
                 for col_name, col_type in columns_to_add:
