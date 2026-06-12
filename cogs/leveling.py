@@ -7,6 +7,35 @@ from utils.db import db
 import os
 import sqlite3  # Not used natively but maybe later
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+def get_active_streak(user_data):
+    streak = user_data.get("streak", 0)
+    if streak <= 0:
+        return 0
+        
+    last_daily = user_data.get("last_daily")
+    if not last_daily:
+        return streak
+        
+    if isinstance(last_daily, str):
+        last_daily = datetime.strptime(str(last_daily).split(".")[0], "%Y-%m-%d %H:%M:%S")
+        
+    kyiv_tz = ZoneInfo("Europe/Kyiv")
+    today = datetime.now(kyiv_tz).date()
+    
+    # Check if last_daily is naive or aware. It should be naive from DB but just in case:
+    if last_daily.tzinfo is None:
+        last_daily = last_daily.replace(tzinfo=ZoneInfo("UTC"))
+        
+    last_daily_date = last_daily.astimezone(kyiv_tz).date()
+    
+    if last_daily_date < today - timedelta(days=1):
+        return 0
+        
+    return streak
+
 # Уровни и названия ролей (каждые 5 уровней)
 MEME_RANKS = {
     0: "[🌫️] Кринж",
@@ -96,7 +125,7 @@ class LevelUpView(discord.ui.View):
             rank_name,
             bg_color,
             user_achievements,
-            user_data.get("streak", 0),
+            get_active_streak(user_data),
             rank_pos,
         )
 
@@ -544,7 +573,7 @@ class Leveling(commands.Cog):
             else "#2b2d31"
         )
         user_achievements = await db.get_achievements(str(member.id))
-        streak = user_data.get("streak", 0)
+        streak = get_active_streak(user_data)
         rank_pos = await db.get_user_rank(str(member.id))
 
         from utils.images import generate_profile_card
@@ -629,7 +658,7 @@ class Leveling(commands.Cog):
         msgs = user_data.get("msg_count", 0)
         spent = user_data.get("shop_spent", 0)
         nicks = user_data.get("nick_changes", 0)
-        streak = user_data.get("streak", 0)
+        streak = get_active_streak(user_data)
 
         hours = voice_sec // 3600
         mins = (voice_sec % 3600) // 60
