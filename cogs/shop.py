@@ -7,6 +7,9 @@ import asyncio
 import random
 from datetime import datetime, timedelta
 
+# {member_id: {"original_nick": str, "task": asyncio.Task}}
+_pending_nick_restores: dict[int, dict] = {}
+
 SHOP_ITEMS = {
     "nickname": {
         "name": "🏷️ Погоняло",
@@ -540,10 +543,21 @@ class NicknameModal(Modal):
             )
             return
         try:
-            old_nick = self.target.display_name
+            member_id = self.target.id
+            pending = _pending_nick_restores.get(member_id)
+            if pending:
+                # Уже есть активная смена — отменяем старый таск,
+                # но сохраняем исходный ник
+                pending["task"].cancel()
+                original_nick = pending["original_nick"]
+            else:
+                # Первая смена — запоминаем текущий ник как исходный
+                original_nick = self.target.display_name
+
             await self.target.edit(nick=self.nick_input.value)
             await db.update_user(
-                str(interaction.user.id), vibecoins=user_data["vibecoins"] - 1000
+                str(interaction.user.id),
+                vibecoins=user_data["vibecoins"] - 1000,
             )
             interaction.client.dispatch(
                 "shop_purchased",
@@ -552,14 +566,23 @@ class NicknameModal(Modal):
                 1000,
                 user_data.get("nick_changes", 0) + 1,
             )
-            await interaction.followup.send(f"✅ Готово!", ephemeral=True)
+            await interaction.followup.send("✅ Готово!", ephemeral=True)
+
+            target_ref = self.target
 
             async def _res():
-                await asyncio.sleep(3600)
-                await self.target.edit(nick=old_nick)
+                try:
+                    await asyncio.sleep(3600)
+                    await target_ref.edit(nick=original_nick)
+                finally:
+                    _pending_nick_restores.pop(member_id, None)
 
-            asyncio.create_task(_res())
-        except:
+            task = asyncio.create_task(_res())
+            _pending_nick_restores[member_id] = {
+                "original_nick": original_nick,
+                "task": task,
+            }
+        except Exception:
             await interaction.followup.send("❌ Ошибка.", ephemeral=True)
 
 
@@ -601,28 +624,44 @@ class FakeStatusModal(Modal):
             )
             return
         try:
-            old_nick = interaction.user.display_name
-            await interaction.user.edit(
-                nick=f"{old_nick} | {self.status_input.value}"[:32]
+            member = interaction.user
+            member_id = member.id
+            pending = _pending_nick_restores.get(member_id)
+            if pending:
+                pending["task"].cancel()
+                original_nick = pending["original_nick"]
+            else:
+                original_nick = member.display_name
+
+            await member.edit(
+                nick=f"{original_nick} | {self.status_input.value}"[:32]
             )
             await db.update_user(
-                str(interaction.user.id), vibecoins=user_data["vibecoins"] - 500
+                str(member_id),
+                vibecoins=user_data["vibecoins"] - 500,
             )
             interaction.client.dispatch(
                 "shop_purchased",
-                interaction.user,
+                member,
                 "fake_status",
                 500,
                 user_data.get("nick_changes", 0) + 1,
             )
-            await interaction.followup.send(f"✅ Готово!", ephemeral=True)
+            await interaction.followup.send("✅ Готово!", ephemeral=True)
 
             async def _res():
-                await asyncio.sleep(3600)
-                await interaction.user.edit(nick=old_nick)
+                try:
+                    await asyncio.sleep(3600)
+                    await member.edit(nick=original_nick)
+                finally:
+                    _pending_nick_restores.pop(member_id, None)
 
-            asyncio.create_task(_res())
-        except:
+            task = asyncio.create_task(_res())
+            _pending_nick_restores[member_id] = {
+                "original_nick": original_nick,
+                "task": task,
+            }
+        except Exception:
             await interaction.followup.send("❌ Ошибка.", ephemeral=True)
 
 
