@@ -14,6 +14,14 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+# Отдельный файл-лог для activity_cleanup (диагностика)
+_ac_handler = logging.FileHandler("activity_cleanup.log", encoding="utf-8")
+_ac_handler.setLevel(logging.INFO)
+_ac_handler.setFormatter(
+    logging.Formatter("[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+)
+logging.getLogger("activity_cleanup").addHandler(_ac_handler)
+
 # Фикс кодировки для Windows
 if sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")

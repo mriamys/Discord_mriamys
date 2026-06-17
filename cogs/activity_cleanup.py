@@ -6,11 +6,20 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 
+logger = logging.getLogger("activity_cleanup")
+
+
 class ActivityCleanup(commands.Cog):
     """Автоматическое удаление сообщений об активностях (Discord Activities)
-    из текстовых каналов, когда пользователь выходит из активности."""
+    из текстовых каналов, когда пользователь выходит из активности.
 
-    # Ключевые слова для определения сообщений-приглашений в активности (embed)
+    Три механизма удаления:
+    1. on_message — трекаем сообщения об активностях в реальном времени
+    2. on_voice_state_update — удаляем при выходе из войса (+ сканируем канал)
+    3. Периодическая задача — каждые 2 мин проверяем, завершились ли активности
+    """
+
+    # Ключевые слова для определения activity embed
     ACTIVITY_EMBED_KEYWORDS = [
         "приглашение в игру",
         "invitation to play",
@@ -30,28 +39,30 @@ class ActivityCleanup(commands.Cog):
         "запустить",
         "started an activity",
         "is playing",
-        "started playing",
     ]
 
-    # Известные типы системных сообщений для активностей
+    # Системные типы сообщений для активностей
     ACTIVITY_MESSAGE_TYPES = {46, 47, 48}
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        # user_id -> list of tracked message info dicts
+        # user_id -> list of tracked dicts
         self._tracked: dict[int, list[dict]] = {}
+        # Каналы, в которых мы видели activity-сообщения (для сканирования)
+        self._activity_channels: set[int] = set()
         self._cleanup_stale.start()
+        self._check_ended_activities.start()
 
     def cog_unload(self) -> None:
         self._cleanup_stale.cancel()
+        self._check_ended_activities.cancel()
 
     # ------------------------------------------------------------------
-    # Утилита: собрать весь текст из embed-а для анализа
+    # Утилиты
     # ------------------------------------------------------------------
     @staticmethod
     def _get_embed_full_text(embed: discord.Embed) -> str:
-        """Собирает весь текст из embed-а (title, description, author,
-        footer, fields) в одну строку для поиска ключевых слов."""
+        """Собирает весь текст из всех полей embed-а."""
         parts: list[str] = []
         if embed.title:
             parts.append(embed.title)
@@ -68,70 +79,56 @@ class ActivityCleanup(commands.Cog):
                 parts.append(field.value)
         return " ".join(parts).lower()
 
-    # ------------------------------------------------------------------
-    # Утилита: извлечь название активности из сообщения
-    # ------------------------------------------------------------------
     @staticmethod
     def _extract_activity_name(message: discord.Message) -> Optional[str]:
-        """Извлекает название активности из embed-а или контента сообщения."""
-        # Из embed-ов
+        """Извлекает название активности из сообщения."""
         for embed in message.embeds:
             if embed.title:
                 return embed.title.strip()
             if embed.author and embed.author.name:
                 return embed.author.name.strip()
-
-        # Из interaction metadata
         if message.interaction is not None:
             return message.interaction.name
-
-        # Из контента ("Mriamys использует Farm Merge Valley")
         content = message.content or ""
         for kw in ("использует", "is playing", "started"):
             if kw in content.lower():
                 return content.strip()
-
+        if message.author.bot:
+            return message.author.name
         return None
 
-    # ------------------------------------------------------------------
-    # Утилита: проверить, является ли сообщение приглашением в активность
-    # ------------------------------------------------------------------
     def _is_activity_message(self, message: discord.Message) -> bool:
         """Определяет, является ли сообщение уведомлением об активности."""
-        # 1. Системное сообщение с атрибутом activity
+        # 1. Атрибут activity
         if message.activity is not None:
             return True
 
-        # 2. Системные типы Discord для активностей
+        # 2. Системные типы для активностей
         if message.type.value in self.ACTIVITY_MESSAGE_TYPES:
             return True
 
-        # 3. Сообщения от ботов с embed-приглашениями в игру
-        #    Проверяем ВСЕ текстовые поля embed-а, а не только title/description
+        # 3. Бот + embed с ключевыми словами (все поля embed-а)
         if message.author.bot and message.embeds:
             for embed in message.embeds:
                 full_text = self._get_embed_full_text(embed)
                 if any(kw in full_text for kw in self.ACTIVITY_EMBED_KEYWORDS):
                     return True
 
-        # 4. Сообщения от ботов, запущенных через interaction (кнопка "Запустить")
+        # 4. Бот + interaction (кнопка "Запустить")
         if message.author.bot and message.interaction is not None:
             return True
 
-        # 5. Сообщения с компонентами (кнопками) от ботов — Activity-игры
-        #    всегда отправляют embed + кнопку "Играть"/"Play"
-        if message.author.bot and message.components:
-            has_embed = bool(message.embeds)
-            if has_embed:
-                return True
+        # 5. Бот + embed + компоненты (кнопки) — Activity-игры всегда имеют кнопку
+        if message.author.bot and message.components and message.embeds:
+            return True
 
-        # 6. Системные сообщения (не default) с паттернами активности
+        # 6. Не-default сообщение с ключевыми словами
         if message.type != discord.MessageType.default:
             content_lower = (message.content or "").lower()
             if any(kw in content_lower for kw in self.ACTIVITY_CONTENT_KEYWORDS):
                 return True
 
-        # 7. Любые сообщения с контентом об активностях + упоминания/боты
+        # 7. Любое сообщение с ключевыми словами + бот/упоминание
         content_lower = (message.content or "").lower()
         if any(kw in content_lower for kw in self.ACTIVITY_CONTENT_KEYWORDS):
             if message.author.bot or message.mentions:
@@ -139,57 +136,77 @@ class ActivityCleanup(commands.Cog):
 
         return False
 
-    # ------------------------------------------------------------------
-    # Утилита: определить user_id автора/инициатора активности
-    # ------------------------------------------------------------------
     @staticmethod
     def _get_activity_user_id(message: discord.Message) -> Optional[int]:
-        """Пытается определить, кто запустил активность."""
-        # Из interaction (пользователь нажал кнопку "Запустить")
+        """Определяет ID пользователя, запустившего активность."""
         if message.interaction is not None:
             return message.interaction.user.id
-
-        # Если это системное сообщение — автор = инициатор
         if message.type != discord.MessageType.default:
             return message.author.id
-
-        # Если в сообщении есть упоминания — первый упомянутый
         if message.mentions:
             return message.mentions[0].id
-
         return None
 
     # ------------------------------------------------------------------
-    # on_message — трекаем сообщения об активностях
+    # on_message — трекаем в реальном времени
     # ------------------------------------------------------------------
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
         if message.guild is None:
             return
 
-        # Дебаг-лог для всех сообщений от ботов с embed-ами
-        if message.author.bot and message.embeds:
-            for i, embed in enumerate(message.embeds):
-                author_name = embed.author.name if embed.author else None
-                logging.debug(
-                    f"[ActivityCleanup] Бот-сообщение: "
-                    f"author={message.author.name!r}, "
-                    f"msg_type={message.type!r} (value={message.type.value}), "
-                    f"embed[{i}] title={embed.title!r}, "
-                    f"desc={embed.description!r}, "
-                    f"embed_author={author_name!r}, "
-                    f"interaction={message.interaction!r}, "
-                    f"components={len(message.components)}"
+        # Подробный лог ВСЕХ бот-сообщений (помогает понять структуру)
+        if message.author.bot:
+            content_preview = (message.content or "")[:120]
+            embed_info = []
+            for emb in message.embeds:
+                author_name = emb.author.name if emb.author else None
+                embed_info.append(
+                    f"title={emb.title!r}, desc={emb.description!r}, "
+                    f"author={author_name!r}"
                 )
+            embed_str = "; ".join(embed_info) if embed_info else "нет"
+            logger.info(
+                "[ActivityCleanup] БОТ-MSG: name=%s, type=%s (val=%d), "
+                "content=%r, embeds=[%s], components=%d, interaction=%s",
+                message.author.name,
+                message.type.name,
+                message.type.value,
+                content_preview,
+                embed_str,
+                len(message.components),
+                message.interaction is not None,
+            )
+
+        # Лог системных сообщений (не от ботов)
+        if message.type != discord.MessageType.default and not message.author.bot:
+            logger.info(
+                "[ActivityCleanup] SYS-MSG: author=%s, type=%s (val=%d), "
+                "content=%r",
+                message.author.name,
+                message.type.name,
+                message.type.value,
+                (message.content or "")[:120],
+            )
 
         if not self._is_activity_message(message):
             return
 
+        self._track_message(message)
+
+    # ------------------------------------------------------------------
+    # Трекинг сообщения
+    # ------------------------------------------------------------------
+    def _track_message(self, message: discord.Message) -> None:
+        """Добавляет сообщение в отслеживаемые."""
         user_id = self._get_activity_user_id(message)
         activity_name = self._extract_activity_name(message)
-
-        # Если не смогли определить пользователя — трекаем под ID 0 (общий пул)
         key = user_id or 0
+
+        # Проверяем, не трекается ли уже это сообщение
+        if key in self._tracked:
+            if any(e["message_id"] == message.id for e in self._tracked[key]):
+                return
 
         if key not in self._tracked:
             self._tracked[key] = []
@@ -197,51 +214,54 @@ class ActivityCleanup(commands.Cog):
         self._tracked[key].append(
             {
                 "message": message,
+                "message_id": message.id,
                 "channel_id": message.channel.id,
                 "activity_name": activity_name,
+                "tracked_at": datetime.now(tz=timezone.utc),
             }
         )
 
-        logging.info(
-            f"[ActivityCleanup] Отслеживаю сообщение об активности "
-            f"(id={message.id}, type={message.type!r}, user={key}, "
-            f"activity={activity_name!r}) в #{message.channel.name}"
+        self._activity_channels.add(message.channel.id)
+
+        logger.info(
+            "[ActivityCleanup] ✅ ОТСЛЕЖИВАЮ: msg_id=%d, type=%s, "
+            "user=%d, activity=%r, channel=#%s",
+            message.id,
+            message.type.name,
+            key,
+            activity_name,
+            message.channel.name,
         )
 
     # ------------------------------------------------------------------
-    # on_presence_update — ловим момент когда пользователь выходит из активности
+    # on_presence_update — ловим завершение активности
     # ------------------------------------------------------------------
     @commands.Cog.listener()
     async def on_presence_update(
         self, before: discord.Member, after: discord.Member
     ) -> None:
-        # Собираем ВСЕ активности (playing, streaming, custom, unknown — любые)
-        # Discord Activities не всегда помечены как ActivityType.playing
+        # Все активности (не только playing — Activities могут быть любого типа)
         before_activities = {a.name for a in before.activities if a.name}
         after_activities = {a.name for a in after.activities if a.name}
 
-        # Активности, из которых пользователь вышел
         stopped = before_activities - after_activities
         if not stopped:
             return
 
-        # Проверяем есть ли отслеженные сообщения для этого пользователя
         if before.id not in self._tracked:
             return
 
-        logging.info(
-            f"[ActivityCleanup] {before.display_name} завершил активности: "
-            f"{', '.join(stopped)}"
+        logger.info(
+            "[ActivityCleanup] %s завершил: %s",
+            before.display_name,
+            ", ".join(stopped),
         )
 
-        # Небольшая задержка — Discord может обновить presence раньше,
-        # чем сообщение будет отправлено
         await asyncio.sleep(2)
-
         await self._delete_user_activity_messages(before.id, stopped)
 
     # ------------------------------------------------------------------
-    # on_voice_state_update — бэкап: чистим когда пользователь выходит из войса
+    # on_voice_state_update — удаляем при выходе из войса + сканируем канал
     # ------------------------------------------------------------------
     @commands.Cog.listener()
     async def on_voice_state_update(
@@ -252,43 +272,156 @@ class ActivityCleanup(commands.Cog):
     ) -> None:
         # Пользователь полностью вышел из войса
         if before.channel is not None and after.channel is None:
+            logger.info(
+                "[ActivityCleanup] %s вышел из войса (#%s)",
+                member.display_name,
+                before.channel.name,
+            )
+
+            # 1. Удаляем отслеженные сообщения
             if member.id in self._tracked:
-                logging.info(
-                    f"[ActivityCleanup] {member.display_name} вышел из войса, "
-                    f"удаляю все отслеженные сообщения об активностях"
-                )
                 await self._delete_user_activity_messages(member.id)
 
+            # 2. Фоллбэк: сканируем известные каналы на случай,
+            #    если on_message не затрекал сообщения
+            await self._scan_and_clean(member.guild, member.id)
+
     # ------------------------------------------------------------------
-    # Удаление сообщений конкретного пользователя
+    # Сканирование каналов (фоллбэк, если on_message не поймал)
+    # ------------------------------------------------------------------
+    async def _scan_and_clean(
+        self, guild: discord.Guild, user_id: int
+    ) -> None:
+        """Сканирует известные каналы и удаляет activity-сообщения пользователя."""
+        if not self._activity_channels:
+            # Если ни один канал ещё не известен — сканируем все текстовые
+            channels_to_scan = [
+                ch
+                for ch in guild.text_channels
+                if ch.permissions_for(guild.me).read_message_history
+            ]
+        else:
+            channels_to_scan = [
+                guild.get_channel(ch_id)
+                for ch_id in self._activity_channels
+                if guild.get_channel(ch_id) is not None
+            ]
+
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=2)
+        total_deleted = 0
+
+        for channel in channels_to_scan:
+            if not isinstance(channel, discord.TextChannel):
+                continue
+            try:
+                async for msg in channel.history(limit=50, after=cutoff):
+                    if not self._is_activity_message(msg):
+                        continue
+
+                    msg_user = self._get_activity_user_id(msg)
+                    if msg_user != user_id and msg_user is not None:
+                        continue
+
+                    try:
+                        await msg.delete()
+                        total_deleted += 1
+                    except discord.NotFound:
+                        total_deleted += 1
+                    except discord.Forbidden:
+                        logger.warning(
+                            "[ActivityCleanup] Нет прав удалить msg_id=%d "
+                            "в #%s",
+                            msg.id,
+                            channel.name,
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "[ActivityCleanup] Ошибка удаления при "
+                            "сканировании: %s",
+                            exc,
+                        )
+            except Exception as exc:
+                logger.error(
+                    "[ActivityCleanup] Ошибка сканирования #%s: %s",
+                    channel.name,
+                    exc,
+                )
+
+        if total_deleted > 0:
+            logger.info(
+                "[ActivityCleanup] 🔍 Сканирование: удалено %d сообщений "
+                "(user=%d)",
+                total_deleted,
+                user_id,
+            )
+
+    # ------------------------------------------------------------------
+    # Периодическая проверка: каждые 2 мин проверяем, закончились ли активности
+    # ------------------------------------------------------------------
+    @tasks.loop(minutes=2)
+    async def _check_ended_activities(self) -> None:
+        """Если у отслеживаемого пользователя нет активностей и он не
+        в войсе — удаляем его сообщения и сканируем каналы."""
+        if not self._tracked:
+            return
+
+        for user_id in list(self._tracked.keys()):
+            if user_id == 0:
+                continue
+
+            # Ищем member в любом гильдии
+            member: Optional[discord.Member] = None
+            guild: Optional[discord.Guild] = None
+            for g in self.bot.guilds:
+                m = g.get_member(user_id)
+                if m is not None:
+                    member = m
+                    guild = g
+                    break
+
+            if member is None:
+                continue
+
+            has_activity = bool(member.activities)
+            in_voice = (
+                member.voice is not None and member.voice.channel is not None
+            )
+
+            if not has_activity and not in_voice:
+                logger.info(
+                    "[ActivityCleanup] ⏰ %s неактивен (нет activities, "
+                    "не в войсе), удаляю сообщения",
+                    member.display_name,
+                )
+                await self._delete_user_activity_messages(user_id)
+                await self._scan_and_clean(guild, user_id)
+
+    @_check_ended_activities.before_loop
+    async def _before_check_ended(self) -> None:
+        await self.bot.wait_until_ready()
+
+    # ------------------------------------------------------------------
+    # Удаление отслеженных сообщений
     # ------------------------------------------------------------------
     async def _delete_user_activity_messages(
         self,
         user_id: int,
         stopped_activities: Optional[set[str]] = None,
     ) -> None:
-        """Удаляет отслеженные сообщения об активностях пользователя.
-
-        Args:
-            user_id: ID пользователя.
-            stopped_activities: Названия завершённых активностей.
-                Если None — удаляет все сообщения пользователя.
-        """
+        """Удаляет отслеженные сообщения об активностях пользователя."""
         entries = self._tracked.get(user_id, [])
         if not entries:
             return
 
-        remaining = []
+        remaining: list[dict] = []
         deleted_count = 0
 
         for entry in entries:
             should_delete = False
 
             if stopped_activities is None:
-                # Удаляем всё
                 should_delete = True
             else:
-                # Удаляем только сообщения, связанные с завершёнными активностями
                 activity_name = entry.get("activity_name") or ""
                 for stopped in stopped_activities:
                     if (
@@ -297,9 +430,7 @@ class ActivityCleanup(commands.Cog):
                     ):
                         should_delete = True
                         break
-
-                # Если не смогли сопоставить по имени — тоже удаляем
-                # (лучше удалить лишнее, чем оставить спам)
+                # Если имя не определено — удаляем на всякий случай
                 if not activity_name:
                     should_delete = True
 
@@ -309,14 +440,17 @@ class ActivityCleanup(commands.Cog):
                     await msg.delete()
                     deleted_count += 1
                 except discord.NotFound:
-                    pass  # Уже удалено
+                    deleted_count += 1  # Уже удалено
                 except discord.Forbidden:
-                    logging.warning(
-                        f"[ActivityCleanup] Нет прав удалить сообщение "
-                        f"(id={msg.id}) в #{msg.channel.name}"
+                    logger.warning(
+                        "[ActivityCleanup] Нет прав удалить msg_id=%d в #%s",
+                        msg.id,
+                        msg.channel.name,
                     )
-                except Exception as e:
-                    logging.error(f"[ActivityCleanup] Ошибка удаления: {e}")
+                except Exception as exc:
+                    logger.error(
+                        "[ActivityCleanup] Ошибка удаления: %s", exc
+                    )
             else:
                 remaining.append(entry)
 
@@ -326,9 +460,11 @@ class ActivityCleanup(commands.Cog):
             del self._tracked[user_id]
 
         if deleted_count > 0:
-            logging.info(
-                f"[ActivityCleanup] Удалено {deleted_count} сообщений "
-                f"об активностях пользователя (id={user_id})"
+            logger.info(
+                "[ActivityCleanup] 🗑️ Удалено %d отслеженных сообщений "
+                "(user=%d)",
+                deleted_count,
+                user_id,
             )
 
     # ------------------------------------------------------------------
@@ -343,14 +479,18 @@ class ActivityCleanup(commands.Cog):
         for uid in list(self._tracked.keys()):
             original = len(self._tracked[uid])
             self._tracked[uid] = [
-                e for e in self._tracked[uid] if e["message"].created_at > cutoff
+                e
+                for e in self._tracked[uid]
+                if e["message"].created_at > cutoff
             ]
             cleaned += original - len(self._tracked[uid])
             if not self._tracked[uid]:
                 del self._tracked[uid]
 
         if cleaned > 0:
-            logging.info(f"[ActivityCleanup] Очистил {cleaned} устаревших записей")
+            logger.info(
+                "[ActivityCleanup] Очистил %d устаревших записей", cleaned
+            )
 
     @_cleanup_stale.before_loop
     async def _before_cleanup(self) -> None:
