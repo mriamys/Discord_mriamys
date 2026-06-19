@@ -79,6 +79,7 @@ class Achievements(commands.Cog):
             21: "streak_21",
             30: "streak_30",
             50: "streak_50",
+            67: "streak_67",
             69: "streak_69",
             100: "streak_100",
             365: "streak_365",
