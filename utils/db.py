@@ -1,6 +1,7 @@
 import aiomysql
 import logging
 import asyncio
+from datetime import datetime, timedelta
 from config import DB_HOST, DB_USER, DB_PASS, DB_NAME
 
 
@@ -294,6 +295,39 @@ class Database:
                 await cur.execute(
                     "SELECT user_id, voice_memes_count, voice_memes_until FROM users WHERE voice_memes_until IS NOT NULL AND voice_memes_until > %s",
                     (datetime.utcnow(),),
+                )
+                return await cur.fetchall()
+
+    async def get_at_risk_streaks(self):
+        """Получает юзеров, чей стрик под угрозой (пропустили день, но streak_lost_at ещё не установлен)."""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT * FROM users WHERE streak > 1 "
+                    "AND streak_lost_at IS NULL "
+                    "AND last_daily IS NOT NULL "
+                    "AND last_daily < %s",
+                    (datetime.utcnow() - timedelta(days=1),),
+                )
+                return await cur.fetchall()
+
+    async def get_silently_lost_streaks(self):
+        """Находит юзеров, чей стрик был тихо сброшен (streak <= 1, но есть стрик-ачивки)."""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT u.user_id, u.streak, u.streak_lost_at, u.streak_before_loss, "
+                    "u.streak_restores_used, u.streak_restores_month, "
+                    "GROUP_CONCAT(a.achievement_id) as achievements "
+                    "FROM users u "
+                    "JOIN user_achievements a ON u.user_id = a.user_id "
+                    "WHERE u.streak <= 1 "
+                    "AND u.streak_lost_at IS NULL "
+                    "AND u.streak_before_loss = 0 "
+                    "AND a.achievement_id LIKE 'streak%%' "
+                    "OR a.achievement_id = 'no_lifer' "
+                    "GROUP BY u.user_id "
+                    "HAVING u.streak <= 1 AND u.streak_lost_at IS NULL AND u.streak_before_loss = 0"
                 )
                 return await cur.fetchall()
 

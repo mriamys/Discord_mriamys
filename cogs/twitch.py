@@ -208,29 +208,35 @@ class TwitchNotifier(commands.Cog):
         channels_to_send = []
         if not channel:
             for guild in self.bot.guilds:
-                sys_chan = guild.system_channel
-                if sys_chan and sys_chan.permissions_for(guild.me).send_messages:
-                    channels_to_send.append(sys_chan)
-                else:
-                    for text_channel in guild.text_channels:
-                        name = text_channel.name.lower()
-                        if any(
-                            x in name for x in ["уведомления", "стримы", "основной"]
-                        ):
-                            if text_channel.permissions_for(guild.me).send_messages:
-                                channels_to_send.append(text_channel)
-                                break
-                    else:
-                        first_valid = next(
-                            (
-                                c
-                                for c in guild.text_channels
-                                if c.permissions_for(guild.me).send_messages
-                            ),
-                            None,
-                        )
-                        if first_valid:
-                            channels_to_send.append(first_valid)
+                target_channel = None
+                
+                # 1. Приоритет: точное совпадение или ключевые слова
+                for text_channel in guild.text_channels:
+                    name = text_channel.name.lower()
+                    if name == "🎥┃стримы" or any(x in name for x in ["стримы", "уведомления", "основной"]):
+                        if text_channel.permissions_for(guild.me).send_messages:
+                            target_channel = text_channel
+                            break
+                
+                # 2. Если не нашли, используем системный канал
+                if not target_channel:
+                    sys_chan = guild.system_channel
+                    if sys_chan and sys_chan.permissions_for(guild.me).send_messages:
+                        target_channel = sys_chan
+                
+                # 3. Если и его нет — любой первый доступный
+                if not target_channel:
+                    target_channel = next(
+                        (
+                            c
+                            for c in guild.text_channels
+                            if c.permissions_for(guild.me).send_messages
+                        ),
+                        None,
+                    )
+                
+                if target_channel:
+                    channels_to_send.append(target_channel)
         else:
             channels_to_send.append(channel)
         return channels_to_send

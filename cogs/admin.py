@@ -25,6 +25,7 @@ class Admin(commands.Cog):
             name="💰 Экономика и Магазин",
             value="`/give-money <user> <amount>` — Выдать VibeКоины (Owner only).\n"
             "`/give-streak <user> <amount>` — Установить стрик (Owner only).\n"
+            "`/grant-streak-restore <user> <streak>` — Дать юзеру возможность восстановить стрик (Owner only).\n"
             "`/setup_shop` — Инициализировать канал магазина.\n"
             "`/clear_threads` — Удалить все игровые комнаты (ветки) в канале.",
             inline=False,
