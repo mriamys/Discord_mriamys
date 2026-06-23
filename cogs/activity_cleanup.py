@@ -115,12 +115,12 @@ class ActivityCleanup(commands.Cog):
                     return True
 
         # 4. Бот + interaction (кнопка "Запустить")
+        # Раньше тут ловилась любая слеш-команда (interaction is not None). 
+        # Убрали широкие проверки, чтобы не удалять профили, топы и другие сообщения бота.
         if message.author.bot and message.interaction is not None:
-            return True
-
-        # 5. Бот + embed + компоненты (кнопки) — Activity-игры всегда имеют кнопку
-        if message.author.bot and message.components and message.embeds:
-            return True
+            name = message.interaction.name.lower() if message.interaction.name else ""
+            if any(kw in name for kw in self.ACTIVITY_CONTENT_KEYWORDS + self.ACTIVITY_EMBED_KEYWORDS):
+                return True
 
         # 6. Не-default сообщение с ключевыми словами
         if message.type != discord.MessageType.default:
