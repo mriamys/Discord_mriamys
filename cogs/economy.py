@@ -17,10 +17,17 @@ STREAK_RESTORE_NOTIFIED_KEY = "streak_restore_notified"
 
 
 class StreakRestoreView(discord.ui.View):
-    """View с кнопкой восстановления стрика (TikTok-стиль)."""
+    """View с кнопкой восстановления стрика (TikTok-стиль).
 
-    def __init__(self, user_id: str, lost_streak: int, restores_left: int):
+    Persistent view — после перезапуска бота state (user_id и т.д.) теряется,
+    поэтому кнопка определяет владельца через interaction.user.id и берёт
+    данные о стрике из БД.
+    """
+
+    def __init__(self, user_id: str | None = None, lost_streak: int = 0, restores_left: int = 0):
         super().__init__(timeout=None)
+        # Эти поля используются ТОЛЬКО при первой отправке сообщения,
+        # после рестарта бота они будут None/0 — и это ок.
         self.user_id = user_id
         self.lost_streak = lost_streak
         self.restores_left = restores_left
@@ -33,13 +40,10 @@ class StreakRestoreView(discord.ui.View):
     async def restore_streak(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        if str(interaction.user.id) != self.user_id:
-            await interaction.response.send_message(
-                "❌ Это не твоя кнопка.", ephemeral=True
-            )
-            return
+        # Определяем user_id из interaction — работает и после рестарта
+        uid = str(interaction.user.id)
 
-        user_data = await db.get_user(self.user_id)
+        user_data = await db.get_user(uid)
         streak_lost_at = user_data.get("streak_lost_at")
 
         # Проверяем что стрик ещё в состоянии "потерян"
@@ -48,7 +52,10 @@ class StreakRestoreView(discord.ui.View):
                 "✅ Твой стрик уже восстановлен или активен!", ephemeral=True
             )
             button.disabled = True
-            await interaction.message.edit(view=self)
+            try:
+                await interaction.message.edit(view=self)
+            except Exception:
+                pass
             return
 
         # Проверяем 48ч окно
@@ -63,13 +70,16 @@ class StreakRestoreView(discord.ui.View):
                 ephemeral=True,
             )
             await db.update_user(
-                self.user_id,
+                uid,
                 streak=1,
                 streak_lost_at=None,
                 streak_before_loss=0,
             )
             button.disabled = True
-            await interaction.message.edit(view=self)
+            try:
+                await interaction.message.edit(view=self)
+            except Exception:
+                pass
             return
 
         # Проверяем лимит попыток (с автосбросом при смене месяца)
@@ -88,21 +98,26 @@ class StreakRestoreView(discord.ui.View):
                 ephemeral=True,
             )
             await db.update_user(
-                self.user_id,
+                uid,
                 streak=1,
                 streak_lost_at=None,
                 streak_before_loss=0,
             )
             button.disabled = True
-            await interaction.message.edit(view=self)
+            try:
+                await interaction.message.edit(view=self)
+            except Exception:
+                pass
             return
 
         # Восстанавливаем стрик!
-        restored_streak = user_data.get("streak_before_loss", self.lost_streak)
+        restored_streak = user_data.get("streak_before_loss", 0) or self.lost_streak
+        if restored_streak < 1:
+            restored_streak = 1
         restores_used += 1
 
         await db.update_user(
-            self.user_id,
+            uid,
             streak=restored_streak,
             streak_lost_at=None,
             streak_before_loss=0,
@@ -135,7 +150,7 @@ class Economy(commands.Cog):
         self.check_boost_expirations.start()
         self.check_streak_risks.start()
         # Регистрируем persistent view для кнопки восстановления стрика
-        self.bot.add_view(StreakRestoreView.__new__(StreakRestoreView))
+        self.bot.add_view(StreakRestoreView())
 
     def cog_unload(self):
         self.save_voice_sessions.cancel()
@@ -745,9 +760,9 @@ class Economy(commands.Cog):
         member: discord.Member,
         amount: int,
     ):
-        if interaction.user.id != interaction.guild.owner_id:
+        if not interaction.user.guild_permissions.administrator:
             return await interaction.response.send_message(
-                "❌ Только для владельца.", ephemeral=True
+                "❌ Только для администраторов.", ephemeral=True
             )
 
         if amount < 0:
