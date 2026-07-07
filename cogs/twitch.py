@@ -13,7 +13,7 @@ class TwitchNotifier(commands.Cog):
         self.client_id = os.getenv("TWITCH_CLIENT_ID")
         self.client_secret = os.getenv("TWITCH_CLIENT_SECRET")
         self.main_channel = os.getenv("TWITCH_CHANNEL", "mriamys").lower()
-        self.friend_channels = ["findmeq", "fafikxs", "xloret"]
+        self.friend_channels = ["findmeq", "fafikxs", "xloret", "solevaiyaa"]
         self.announce_channel_id = os.getenv("TWITCH_ANNOUNCE_CHANNEL_ID")
 
         self.app_access_token = None
@@ -209,21 +209,23 @@ class TwitchNotifier(commands.Cog):
         if not channel:
             for guild in self.bot.guilds:
                 target_channel = None
-                
+
                 # 1. Приоритет: точное совпадение или ключевые слова
                 for text_channel in guild.text_channels:
                     name = text_channel.name.lower()
-                    if name == "🎥┃стримы" or any(x in name for x in ["стримы", "уведомления", "основной"]):
+                    if name == "🎥┃стримы" or any(
+                        x in name for x in ["стримы", "уведомления", "основной"]
+                    ):
                         if text_channel.permissions_for(guild.me).send_messages:
                             target_channel = text_channel
                             break
-                
+
                 # 2. Если не нашли, используем системный канал
                 if not target_channel:
                     sys_chan = guild.system_channel
                     if sys_chan and sys_chan.permissions_for(guild.me).send_messages:
                         target_channel = sys_chan
-                
+
                 # 3. Если и его нет — любой первый доступный
                 if not target_channel:
                     target_channel = next(
@@ -234,7 +236,7 @@ class TwitchNotifier(commands.Cog):
                         ),
                         None,
                     )
-                
+
                 if target_channel:
                     channels_to_send.append(target_channel)
         else:
