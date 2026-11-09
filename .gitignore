@@ -13,5 +13,7 @@ update_to_vps.py
 deploy_bot.py
 upload_env.py
 fix.md
-
-
+.env
+*.log
+__pycache__/
+*.pyc

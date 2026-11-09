@@ -1,0 +1,18 @@
+services:
+  discord-bot:
+    build: .
+    container_name: discord-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - .:/app
+    deploy:
+      resources:
+        reservations:
+          memory: 30M
+    networks:
+      - bots-net
+
+networks:
+  bots-net:
+    external: true
